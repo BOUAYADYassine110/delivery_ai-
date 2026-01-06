@@ -38,6 +38,11 @@ An advanced AI-powered delivery management system with **16 drivers** across 6 M
 ### 1. Backend Setup
 ```bash
 cd backend
+
+# Copy environment template
+cp .env.example .env
+# Edit .env and add your API keys if needed (optional)
+
 pip install -r requirements.txt
 python main.py
 ```
