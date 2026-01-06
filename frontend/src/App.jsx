@@ -14,6 +14,7 @@ import DriverLogin from './pages/DriverLogin'
 import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
 import SystemCoverage from './pages/SystemCoverage'
+import DeliverySimulation from './pages/DeliverySimulation'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,6 +73,7 @@ function App() {
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin/dashboard" element={<AdminProtectedRoute><AdminDashboard /></AdminProtectedRoute>} />
                 <Route path="/system/coverage" element={<SystemCoverage />} />
+                <Route path="/simulation/:orderId" element={<ProtectedRoute><DeliverySimulation /></ProtectedRoute>} />
               </Routes>
             </div>
           </main>

@@ -23,6 +23,19 @@ wheels/
 .installed.cfg
 *.egg
 
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
 # Node
 node_modules/
 npm-debug.log*
@@ -30,44 +43,142 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 dist/
-build/
+dist-ssr/
+*.local
 
-# Environment
-.env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
+# Logs
+logs/
+*.log
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
 
-# Logs
-*.log
-logs/
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
-
 # MongoDB
 data/
+mongodb/
 
-# Misc
-.qodo/
+# Test files
+test_*.py
+*_test.py
+check_*.py
+cleanup_*.py
+create_test_*.py
+reset_*.py
+sync_*.py
+fix_*.py
+
+# Documentation (keep only README.md)
+*_GUIDE.md
+*_SUMMARY.md
+*_IMPLEMENTATION.md
+*_CHECKLIST.md
+*_SETUP.md
+*_DOCS.md
+*_STATUS.md
+*_ROADMAP.md
+*_FIXES.md
+*_REFERENCE.md
+CHANGES_SUMMARY.md
+CREWAI_FIXED.md
+DELIVERY_SIMULATION.md
+ENABLE_AI_MODE.md
+ENHANCEMENTS.md
+FRONTEND_REDESIGN.md
+INTEGRATION_STATUS.md
+INTER_CITY_WORKFLOW.md
+INTRA_CITY_AUTO_ACCEPT.md
+LLM_SETUP.md
+mobile-setup.md
+MONGODB_SETUP.md
+MOROCCO_PRICING.md
+PRESENTATION_*.md
+QUICK_START.md
+TESTING_CHECKLIST.md
+VISUAL_*.md
+WORKFLOW_*.md
+
+# Batch files
+*.bat
+
+# Backup files
 *.bak
+*.backup
+*_backup.*
+*-backup.*
+
+# Temporary files
 *.tmp
+*.temp
+.qodo/
+
+# Package lock (keep package.json only)
+package-lock.json
+
+# Python scripts in root backend
+backend/admin_endpoints.py
+backend/complete_*.py
+backend/enhanced_endpoints.py
+backend/migrate_*.py
+backend/mongodb_service.py
+backend/database_models.py
+backend/init_mongodb.py
+backend/setup_*.py
+backend/MAIN_PY_INTEGRATION.py
+backend/FIX_*.py
+
+# Unused frontend files
+frontend/src/App-*.jsx
+frontend/src/main-*.jsx
+frontend/src/styles.css
+frontend/src/pages/MinimalDashboard.jsx
+frontend/src/pages/SimpleDashboard.jsx
+frontend/src/pages/DatabaseTestPage.jsx
+frontend/src/pages/TestPage.jsx
+frontend/src/pages/CreateInterCityOrder.jsx
+frontend/src/pages/EnhancedAdminDashboard.jsx
+frontend/src/pages/EnhancedDriverDashboard.jsx
+frontend/src/pages/SuperAdminDashboard.jsx
+frontend/src/components/EnhancedComponents.jsx
+frontend/src/components/StaticRouteMap.jsx
+frontend/src/components/RouteMapDisplay.jsx
+frontend/FRONTEND_*.md
+
+# Unused backend routes
+backend/api/routes/agents.py
+backend/api/routes/analytics.py
+backend/api/routes/batch_assignment.py
+backend/api/routes/courier.py
+backend/api/routes/delivery.py
+backend/api/routes/driver_auth.py
+backend/api/routes/dynamic_warehouse_routes.py
+backend/api/routes/enhanced_tracking.py
+backend/api/routes/inter_city.py
+backend/api/routes/orders.py
+backend/api/routes/pricing.py
+backend/api/routes/tracking.py
+backend/api/routes/warehouse_routes.py
+
+# Unused backend services
+backend/api/services/agent_service.py
+backend/api/services/data_logger.py
+backend/api/services/delivery_router.py
+backend/api/services/enhanced_delivery_workflow.py
+backend/api/services/intra_city_workflow.py
+backend/api/services/notification_service.py
+backend/api/services/real_time_routing.py
+backend/api/services/route_monitor.py
+backend/api/services/warehouse_management.py
+
+# Core duplicates
+backend/core/auth.py
+backend/core/config.py
+backend/core/database.py
+backend/core/websocket.py
+
+# Unused agents
+agents/
+
+# Unused tasks
+tasks/

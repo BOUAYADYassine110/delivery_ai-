@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Package, TrendingUp, Clock, CheckCircle, Loader, Plus, Search, MapPin, Truck, ArrowRight } from 'lucide-react'
+import { Package, TrendingUp, Clock, CheckCircle, Loader, Plus, Search, MapPin, Truck, ArrowRight, Play } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 export default function Dashboard() {
@@ -12,11 +12,30 @@ export default function Dashboard() {
     const auth = JSON.parse(localStorage.getItem('auth') || '{}')
     setUser(auth.user)
 
-    // Fetch orders
-    fetch('http://localhost:8001/api/orders')
-      .then(res => res.json())
+    // Fetch orders with JWT token
+    const token = auth.access_token
+    if (!token) {
+      setLoading(false)
+      return
+    }
+
+    fetch('http://localhost:8001/api/orders', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+      .then(res => {
+        if (res.status === 401) {
+          localStorage.removeItem('auth')
+          window.location.href = '/login'
+          return
+        }
+        return res.json()
+      })
       .then(data => {
-        setOrdersData(Array.isArray(data) ? data : [])
+        if (data) {
+          setOrdersData(Array.isArray(data) ? data : [])
+        }
         setLoading(false)
       })
       .catch(err => {
@@ -219,6 +238,15 @@ export default function Dashboard() {
                   <div className="font-bold text-gray-900">{order.price} MAD</div>
                   <div className="text-xs text-gray-500 capitalize">{order.service_type}</div>
                 </div>
+                {order.status !== 'delivered' && (
+                  <Link
+                    to={`/simulation/${order.id}`}
+                    className="ml-3 px-4 py-2 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-lg hover:from-green-600 hover:to-blue-600 transition-all flex items-center gap-2 font-semibold shadow-md hover:shadow-lg"
+                  >
+                    <Play className="w-4 h-4" />
+                    Simulate
+                  </Link>
+                )}
               </div>
             ))}
           </div>

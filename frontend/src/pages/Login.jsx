@@ -24,6 +24,7 @@ export default function Login() {
       if (response.ok) {
         const data = await response.json()
         const authData = {
+          access_token: data.access_token,
           token: data.access_token,
           user: data.user,
           expiry: Date.now() + (24 * 60 * 60 * 1000)

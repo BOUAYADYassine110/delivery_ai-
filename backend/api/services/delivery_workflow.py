@@ -12,25 +12,99 @@ try:
 except:
     CREWAI_AVAILABLE = False
 
-# Import agent definitions
-try:
-    from agents.intra_city.coordinator_agent import coordinator_agent
-    from agents.intra_city.courier_management_agent import courier_management_agent
-    from agents.intra_city.pricing_agent import pricing_agent as intra_pricing_agent
-    from agents.intra_city.smart_routing_agent import smart_routing_agent
-    from agents.intra_city.tracking_monitoring_agent import tracking_monitoring_agent
-    from agents.intra_city.client_service_agent import client_service_agent
-    
-    from agents.inter_city.inter_city_coordinator_agent import inter_city_coordinator_agent
-    from agents.inter_city.warehouse_coordinator_agent import warehouse_coordinator_agent
-    from agents.inter_city.transportation_coordinator_agent import transportation_coordinator_agent
-    from agents.inter_city.inter_city_pricing_agent import inter_city_pricing_agent
-    from agents.inter_city.long_distance_routing_agent import long_distance_routing_agent
-    from agents.inter_city.logistics_hub_agent import logistics_hub_agent
-    
-    AGENTS_LOADED = True
-except Exception as e:
-    print(f"⚠️  Agent files not loaded: {e}")
+# Create agent instances directly
+if CREWAI_AVAILABLE:
+    try:
+        llm_instance = LLM(model="ollama/llama3.2", base_url="http://localhost:11434")
+        
+        # Intra-city agents
+        coordinator_agent = Agent(
+            role="Intra-City Delivery Coordinator",
+            goal="Orchestrate intra-city delivery workflow",
+            backstory="Expert logistics coordinator for urban deliveries",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        courier_management_agent = Agent(
+            role="Courier Management Specialist",
+            goal="Assign and manage drivers for deliveries",
+            backstory="Fleet manager optimizing driver assignments",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        intra_pricing_agent = Agent(
+            role="Intra-City Pricing Agent",
+            goal="Calculate accurate delivery prices",
+            backstory="Pricing expert for local deliveries",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        smart_routing_agent = Agent(
+            role="Smart Routing Agent",
+            goal="Plan optimal routes within city",
+            backstory="Navigation expert for urban routing",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        client_service_agent = Agent(
+            role="Client Service Agent",
+            goal="Process and validate customer orders",
+            backstory="Customer service specialist",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        # Inter-city agents
+        inter_city_coordinator_agent = Agent(
+            role="Inter-City Coordinator",
+            goal="Coordinate cross-city deliveries",
+            backstory="Expert in long-distance logistics",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        warehouse_coordinator_agent = Agent(
+            role="Warehouse Coordinator",
+            goal="Manage warehouse operations",
+            backstory="Warehouse logistics specialist",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        transportation_coordinator_agent = Agent(
+            role="Transportation Coordinator",
+            goal="Schedule inter-city transport",
+            backstory="Transport scheduling expert",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        inter_city_pricing_agent = Agent(
+            role="Inter-City Pricing Agent",
+            goal="Calculate inter-city delivery prices",
+            backstory="Long-distance pricing specialist",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        long_distance_routing_agent = Agent(
+            role="Long Distance Routing Agent",
+            goal="Plan inter-city routes",
+            backstory="Expert in long-distance route planning",
+            llm=llm_instance,
+            verbose=True
+        )
+        
+        AGENTS_LOADED = True
+        print("[SUCCESS] All agents created successfully")
+    except Exception as e:
+        print("WARNING: Could not create agents: {}".format(str(e)))
+        AGENTS_LOADED = False
+else:
     AGENTS_LOADED = False
 
 class DeliveryWorkflow:
@@ -46,6 +120,13 @@ class DeliveryWorkflow:
         """Main workflow - routes to appropriate agent team"""
         is_inter_city = order['pickup_city'].lower() != order['delivery_city'].lower()
         
+        print("\n" + "="*60)
+        print(f"PROCESSING ORDER: {order['pickup_city']} -> {order['delivery_city']}")
+        print(f"Type: {'INTER-CITY' if is_inter_city else 'INTRA-CITY'}")
+        print(f"Agents Loaded: {AGENTS_LOADED}")
+        print(f"LLM Available: {self.llm is not None}")
+        print("="*60 + "\n")
+        
         if is_inter_city:
             return await self._inter_city_workflow(order, drivers)
         else:
@@ -53,8 +134,14 @@ class DeliveryWorkflow:
     
     async def _intra_city_workflow(self, order: dict, drivers: list):
         """Intra-city delivery workflow"""
+        print("[WORKFLOW] Starting INTRA-CITY workflow...")
+        
         if not AGENTS_LOADED or not self.llm:
+            print("[WORKFLOW] Using FALLBACK mode (agents not loaded or LLM unavailable)")
             return self._fallback_intra_city(order, drivers)
+        
+        print("[WORKFLOW] Using AI MODE with CrewAI agents")
+        print("[WORKFLOW] Agents will now collaborate...\n")
         
         try:
             # 1. Client Service Agent - Process order
@@ -96,7 +183,7 @@ class DeliveryWorkflow:
                 agents=[client_service_agent, intra_pricing_agent, courier_management_agent, 
                        smart_routing_agent, coordinator_agent],
                 tasks=[client_task, pricing_task, courier_task, routing_task, coord_task],
-                verbose=False
+                verbose=True  # Enable verbose to see agent thinking
             )
             
             result = crew.kickoff()
@@ -156,7 +243,7 @@ class DeliveryWorkflow:
                        transportation_coordinator_agent, inter_city_pricing_agent, 
                        long_distance_routing_agent],
                 tasks=[coord_task, warehouse_task, transport_task, pricing_task, routing_task],
-                verbose=False
+                verbose=True  # Enable verbose to see agent thinking
             )
             
             result = crew.kickoff()

@@ -1,116 +1,215 @@
-from crewai import Crew
-from agents.inter_city.inter_city_coordinator_agent import inter_city_coordinator_agent
-from agents.inter_city.inter_city_client_service_agent import inter_city_client_service_agent
-from agents.inter_city.inter_city_pricing_agent import inter_city_pricing_agent
-from agents.inter_city.long_distance_routing_agent import long_distance_routing_agent
-from agents.inter_city.logistics_hub_agent import logistics_hub_agent
-from agents.inter_city.transportation_coordinator_agent import transportation_coordinator_agent
-from agents.inter_city.warehouse_coordinator_agent import warehouse_coordinator_agent
-from agents.inter_city.customs_clearance_agent import customs_clearance_agent
-from tasks.inter_city_tasks import *
+"""
+Inter-City Delivery Workflow Manager
+Handles multi-day warehouse-based logistics
+"""
+from datetime import datetime, timedelta
+from typing import Dict, List
 
 class InterCityWorkflow:
-    def __init__(self):
-        self.coordinator = inter_city_coordinator_agent
-        self.client_service = inter_city_client_service_agent
-        self.pricing = inter_city_pricing_agent
-        self.routing = long_distance_routing_agent
-        self.hub_mgmt = logistics_hub_agent
-        self.transportation = transportation_coordinator_agent
-        self.warehouse = warehouse_coordinator_agent
-        self.customs = customs_clearance_agent
-
-    async def process_inter_city_order(self, order_data):
-        """Process a new inter-city delivery order through the agent workflow"""
-
-        try:
-            # Step 1: Validate inter-city order
-            validate_task = create_validate_inter_city_order_task(self.client_service, order_data)
-
-            # Step 2: Calculate inter-city price
-            price_task = create_calculate_inter_city_price_task(self.pricing, order_data)
-
-            # Step 3: Plan inter-city route
-            route_task = create_plan_inter_city_route_task(
-                self.routing,
-                order_data.get('origin_city'),
-                order_data.get('destination_city'),
-                order_data.get('waypoints')
-            )
-
-            # Step 4: Assign logistics hubs
-            hub_task = create_assign_logistics_hubs_task(self.hub_mgmt, order_data)
-
-            # Step 5: Assign transportation
-            transport_task = create_assign_transportation_task(self.transportation, order_data)
-
-            # Step 6: Handle customs if international
-            tasks = [validate_task, price_task, route_task, hub_task, transport_task]
-            if order_data.get('is_international', False):
-                customs_task = create_handle_customs_clearance_task(self.customs, order_data)
-                tasks.append(customs_task)
-
-            # Step 7: Coordinate workflow
-            coordinate_task = create_coordinate_inter_city_workflow_task(self.coordinator, order_data)
-            tasks.append(coordinate_task)
-
-            # Create crew
-            crew = Crew(
-                agents=[
-                    self.client_service,
-                    self.pricing,
-                    self.routing,
-                    self.hub_mgmt,
-                    self.transportation,
-                    self.customs if order_data.get('is_international', False) else None,
-                    self.coordinator
-                ],
-                tasks=tasks,
-                verbose=True
-            )
-
-            # Execute workflow
-            result = crew.kickoff()
-            return {"status": "success", "result": str(result)}
-
-        except Exception as e:
-            print(f"Inter-city workflow error: {e}")
-            return {"status": "error", "message": str(e)}
-
-    async def monitor_inter_city_delivery(self, order_id, route_data):
-        """Monitor an active inter-city delivery"""
-
-        try:
-            monitor_route_task = create_monitor_inter_city_route_task(self.routing, order_id, route_data)
-            monitor_transport_task = create_monitor_transportation_task(self.transportation, order_id, route_data)
-
-            crew = Crew(
-                agents=[self.routing, self.transportation],
-                tasks=[monitor_route_task, monitor_transport_task],
-                verbose=True
-            )
-
-            result = crew.kickoff()
-            return {"status": "success", "result": str(result)}
-
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-    async def handle_inter_city_completion(self, order_id, completion_data):
-        """Handle inter-city delivery completion"""
-
-        try:
-            verify_task = create_verify_customs_compliance_task(self.customs, order_id, completion_data)
-            notify_task = create_send_inter_city_notification_task(self.client_service, "delivery_completed", order_id)
-
-            crew = Crew(
-                agents=[self.customs, self.client_service],
-                tasks=[verify_task, notify_task],
-                verbose=True
-            )
-
-            result = crew.kickoff()
-            return {"status": "success", "result": str(result)}
-
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+    def __init__(self, orders_db, drivers_db, warehouses_db):
+        self.orders_db = orders_db
+        self.drivers_db = drivers_db
+        self.warehouses_db = warehouses_db
+    
+    async def process_inter_city_order(self, order: Dict) -> Dict:
+        """
+        Day 1: Pickup → Origin Warehouse
+        Day 2-3: Warehouse → Destination City
+        Day 4: Final Delivery
+        """
+        workflow_stages = {
+            "day1_pickup": self._schedule_pickup_to_warehouse,
+            "warehouse_consolidation": self._consolidate_at_warehouse,
+            "inter_city_transport": self._schedule_inter_city_truck,
+            "final_delivery": self._schedule_final_delivery
+        }
+        
+        return {
+            "order_id": order["id"],
+            "workflow": "inter_city",
+            "stages": workflow_stages,
+            "estimated_days": 3
+        }
+    
+    def _schedule_pickup_to_warehouse(self, order: Dict) -> Dict:
+        """Day 1: Assign driver to pickup and deliver to origin warehouse"""
+        origin_city = order["pickup_city"]
+        
+        # Find available driver in origin city
+        available_drivers = [
+            d for d in self.drivers_db 
+            if d["assigned_city"] == origin_city and d["status"] == "available"
+        ]
+        
+        if not available_drivers:
+            return {"status": "no_driver", "retry_in": 30}
+        
+        # Assign driver for warehouse delivery
+        driver = available_drivers[0]
+        warehouse = next((w for w in self.warehouses_db if w["city"] == origin_city), None)
+        
+        return {
+            "stage": "pickup_to_warehouse",
+            "driver_id": driver["id"],
+            "driver_name": driver["name"],
+            "warehouse_id": warehouse["id"] if warehouse else None,
+            "estimated_completion": (datetime.now() + timedelta(hours=4)).isoformat(),
+            "status": "scheduled"
+        }
+    
+    def _consolidate_at_warehouse(self, order: Dict) -> Dict:
+        """Day 1-2: Package waits at warehouse for consolidation"""
+        origin_warehouse = next(
+            (w for w in self.warehouses_db if w["city"] == order["pickup_city"]), 
+            None
+        )
+        
+        if not origin_warehouse:
+            return {"status": "no_warehouse"}
+        
+        # Check capacity
+        current_load = origin_warehouse.get("current_packages", 0)
+        capacity = origin_warehouse.get("capacity", 1000)
+        
+        if current_load >= capacity:
+            return {"status": "warehouse_full", "retry_in": 120}
+        
+        # Update warehouse load
+        origin_warehouse["current_packages"] = current_load + 1
+        
+        return {
+            "stage": "warehouse_consolidation",
+            "warehouse_id": origin_warehouse["id"],
+            "warehouse_name": origin_warehouse["name"],
+            "current_load": current_load + 1,
+            "capacity": capacity,
+            "next_truck_departure": self._get_next_truck_schedule(
+                order["pickup_city"], 
+                order["delivery_city"]
+            ),
+            "status": "consolidating"
+        }
+    
+    def _schedule_inter_city_truck(self, order: Dict) -> Dict:
+        """Day 2-3: Schedule inter-city truck transport"""
+        schedule = self._get_next_truck_schedule(
+            order["pickup_city"], 
+            order["delivery_city"]
+        )
+        
+        # Find packages going to same destination
+        same_destination = [
+            o for o in self.orders_db
+            if o.get("pickup_city") == order["pickup_city"]
+            and o.get("delivery_city") == order["delivery_city"]
+            and o.get("status") == "at_origin_warehouse"
+        ]
+        
+        return {
+            "stage": "inter_city_transport",
+            "departure_time": schedule["departure"],
+            "arrival_time": schedule["arrival"],
+            "duration_hours": schedule["duration"],
+            "batch_size": len(same_destination),
+            "truck_capacity": 50,
+            "status": "scheduled"
+        }
+    
+    def _schedule_final_delivery(self, order: Dict) -> Dict:
+        """Day 4: Assign destination city driver for final delivery"""
+        dest_city = order["delivery_city"]
+        
+        # Find available driver in destination city
+        available_drivers = [
+            d for d in self.drivers_db 
+            if d["assigned_city"] == dest_city and d["status"] == "available"
+        ]
+        
+        if not available_drivers:
+            return {"status": "no_driver", "retry_in": 30}
+        
+        # Assign driver for final delivery
+        driver = available_drivers[0]
+        
+        return {
+            "stage": "final_delivery",
+            "driver_id": driver["id"],
+            "driver_name": driver["name"],
+            "estimated_delivery": (datetime.now() + timedelta(hours=6)).isoformat(),
+            "status": "scheduled"
+        }
+    
+    def _get_next_truck_schedule(self, origin: str, destination: str) -> Dict:
+        """Get next truck departure schedule"""
+        schedules = {
+            ("Casablanca", "Rabat"): {"departure": "08:00", "duration": 2},
+            ("Casablanca", "Marrakech"): {"departure": "09:00", "duration": 4},
+            ("Casablanca", "Agadir"): {"departure": "07:00", "duration": 6},
+            ("Rabat", "Marrakech"): {"departure": "08:00", "duration": 4},
+        }
+        
+        key = (origin, destination)
+        schedule = schedules.get(key, {"departure": "08:00", "duration": 4})
+        
+        # Calculate arrival
+        departure = datetime.now().replace(
+            hour=int(schedule["departure"].split(":")[0]),
+            minute=0
+        )
+        if departure < datetime.now():
+            departure += timedelta(days=1)
+        
+        arrival = departure + timedelta(hours=schedule["duration"])
+        
+        return {
+            "departure": departure.isoformat(),
+            "arrival": arrival.isoformat(),
+            "duration": schedule["duration"]
+        }
+    
+    def update_order_status(self, order_id: str, new_status: str) -> Dict:
+        """Update order status through workflow stages"""
+        order = next((o for o in self.orders_db if o["id"] == order_id), None)
+        if not order:
+            return {"error": "Order not found"}
+        
+        status_flow = {
+            "pending_assignment": "assigned_pickup",
+            "assigned_pickup": "picked_up",
+            "picked_up": "at_origin_warehouse",
+            "at_origin_warehouse": "in_transit_inter_city",
+            "in_transit_inter_city": "at_destination_warehouse",
+            "at_destination_warehouse": "assigned_final_delivery",
+            "assigned_final_delivery": "out_for_delivery",
+            "out_for_delivery": "delivered"
+        }
+        
+        order["status"] = new_status
+        order["last_updated"] = datetime.now().isoformat()
+        
+        # Update warehouse counts
+        if new_status == "at_origin_warehouse":
+            self._increment_warehouse_load(order["pickup_city"])
+        elif new_status == "in_transit_inter_city":
+            self._decrement_warehouse_load(order["pickup_city"])
+        elif new_status == "at_destination_warehouse":
+            self._increment_warehouse_load(order["delivery_city"])
+        elif new_status == "out_for_delivery":
+            self._decrement_warehouse_load(order["delivery_city"])
+        
+        return {
+            "order_id": order_id,
+            "new_status": new_status,
+            "next_status": status_flow.get(new_status),
+            "updated_at": order["last_updated"]
+        }
+    
+    def _increment_warehouse_load(self, city: str):
+        warehouse = next((w for w in self.warehouses_db if w["city"] == city), None)
+        if warehouse:
+            warehouse["current_packages"] = warehouse.get("current_packages", 0) + 1
+    
+    def _decrement_warehouse_load(self, city: str):
+        warehouse = next((w for w in self.warehouses_db if w["city"] == city), None)
+        if warehouse and warehouse.get("current_packages", 0) > 0:
+            warehouse["current_packages"] -= 1

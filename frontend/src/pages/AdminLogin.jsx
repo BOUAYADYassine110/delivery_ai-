@@ -15,8 +15,13 @@ const AdminLogin = () => {
 
     try {
       const response = await api.adminLogin(credentials);
+      const authData = {
+        token: response.data.access_token,
+        user: response.data.admin,
+        expiry: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+      };
+      localStorage.setItem('admin_auth', JSON.stringify(authData));
       localStorage.setItem('admin_token', response.data.access_token);
-      localStorage.setItem('admin_user', JSON.stringify(response.data.admin));
       navigate('/admin/dashboard');
     } catch (error) {
       setError('Invalid admin credentials');

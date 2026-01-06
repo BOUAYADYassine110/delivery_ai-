@@ -52,8 +52,17 @@ export default function Register() {
       })
 
       if (response.ok) {
+        const data = await response.json()
+        // Auto-login after registration
+        const authData = {
+          access_token: data.access_token,
+          token: data.access_token,
+          user: data.user,
+          expiry: Date.now() + (24 * 60 * 60 * 1000)
+        }
+        localStorage.setItem('auth', JSON.stringify(authData))
         setSuccess(true)
-        setTimeout(() => navigate('/login'), 2000)
+        setTimeout(() => window.location.href = '/dashboard', 2000)
       } else {
         const error = await response.json().catch(() => ({}))
         setError(error.detail || 'Registration failed')

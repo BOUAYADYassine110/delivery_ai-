@@ -19,7 +19,7 @@ except ImportError:
         CREWAI_AVAILABLE = True
     except ImportError:
         CREWAI_AVAILABLE = False
-        print("⚠️  CrewAI not available - using fallback logic")
+        print("CrewAI not available - using fallback logic")
 
 class DeliveryAgentCrew:
     def __init__(self):
@@ -27,10 +27,10 @@ class DeliveryAgentCrew:
         if CREWAI_AVAILABLE:
             try:
                 self.llm = LLM(model="ollama/llama3.2", base_url="http://localhost:11434")
-                print("✅ AI Mode enabled with Ollama")
+                print("AI Mode enabled with Ollama")
             except Exception as e:
-                print(f"⚠️  Ollama connection failed: {e}")
-                print("⚠️  Using fallback mode")
+                print(f"Ollama connection failed: {e}")
+                print("Using fallback mode")
         
         self.agents = self._create_agents()
     

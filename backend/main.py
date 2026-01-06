@@ -1,15 +1,62 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 import json
 import asyncio
+import os
+import math
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from auth import (
+    create_access_token, get_password_hash, verify_password,
+    get_current_user, get_current_client, get_current_driver, get_current_admin
+)
+
+# Load environment variables
+load_dotenv()
+
 from api.routes.gps_routes import router as gps_router
 from api.routes.driver_management import router as driver_router
 from api.services.smart_assignment import SmartAssignmentService
-from api.services.crew_service import get_agent_status, get_driver_recommendation, get_price_calculation
-from api.services.delivery_workflow import process_delivery_order, get_workflow_status
+from api.services.delivery_simulator import simulator
+from api.services.inter_city_workflow import InterCityWorkflow
+from api.services.warehouse_manager import WarehouseManager
+
+# Try to import CrewAI services (optional)
+try:
+    from api.services.crew_service import get_agent_status, get_driver_recommendation, get_price_calculation
+    from api.services.warehouse_agent import (
+        check_warehouse_capacity, optimize_warehouse_routing, 
+        coordinate_warehouse_transport, predict_warehouse_capacity,
+        communicate_warehouse_status, get_warehouse_agent_status
+    )
+    CREW_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️  CrewAI not available: {e}")
+    CREW_AVAILABLE = False
+    def get_agent_status(): return {"status": "unavailable"}
+    async def get_driver_recommendation(order, drivers): return None
+    async def get_price_calculation(request): return None
+    async def check_warehouse_capacity(wh_id, warehouses, packages): return {"available": True}
+    async def optimize_warehouse_routing(order, warehouses): return {}
+    async def coordinate_warehouse_transport(wh_id, packages, schedule): return {}
+    async def predict_warehouse_capacity(wh_id, warehouses, data): return {}
+    async def communicate_warehouse_status(order, warehouses): return {}
+    def get_warehouse_agent_status(): return {"status": "unavailable"}
+
+try:
+    from api.services.delivery_workflow import process_delivery_order, get_workflow_status
+    WORKFLOW_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️  Workflow not available: {e}")
+    WORKFLOW_AVAILABLE = False
+    async def process_delivery_order(order, drivers): return None
+    def get_workflow_status(): return {"status": "unavailable"}
+
+# Suppress Pydantic serialization warnings
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 app = FastAPI(title="Enhanced Multi-Agent Delivery System")
 
@@ -37,6 +84,14 @@ app.include_router(enhanced_routing_router, prefix="/api", tags=["Enhanced Routi
 from api.routes.assignment_debug import router as debug_router
 app.include_router(debug_router, prefix="/api", tags=["Debug"])
 
+# Admin routes
+from api.routes.admin_routes import router as admin_router
+app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
+
+# Initialize workflow managers after database definitions
+inter_city_workflow = None
+warehouse_manager = None
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -54,6 +109,8 @@ class OrderCreate(BaseModel):
     delivery_address: str
     pickup_city: str
     delivery_city: str
+    pickup_coordinates: dict = None
+    delivery_coordinates: dict = None
     weight: float = 1.0
     dimensions: dict = {"length": 10, "width": 10, "height": 10}  # cm
     service_type: str = "standard"  # standard, express
@@ -69,6 +126,8 @@ class InterCityOrderCreate(BaseModel):
     delivery_address: str
     pickup_city: str
     delivery_city: str
+    pickup_coordinates: dict = None
+    delivery_coordinates: dict = None
     weight: float = 1.0
     dimensions: dict = {"length": 10, "width": 10, "height": 10}
     service_type: str = "standard"  # standard, express
@@ -121,7 +180,13 @@ class AdminLoginRequest(BaseModel):
 @app.get("/api/agents/status")
 async def agents_status():
     """Get AI agents status"""
-    return get_agent_status()
+    base_status = get_agent_status()
+    warehouse_status = get_warehouse_agent_status()
+    
+    return {
+        **base_status,
+        "warehouse_agent": warehouse_status
+    }
 
 @app.get("/api/workflow/status")
 async def workflow_status():
@@ -219,17 +284,18 @@ def root():
 def test():
     return {"message": "API is working!", "status": "success"}
 
-# In-memory user storage
+# In-memory user storage with hashed passwords
 users_db = [
     {
-        "id": "1",
+        "id": "USER001",
         "username": "testuser",
         "email": "test@example.com",
-        "password": "test123",
+        "password": "$2b$12$PKSDwLIlkz8idpVlTrwaqO4pI95DkOCNsTrBgc9g.BVO4NU1WWUQO",
         "role": "client",
         "full_name": "Test User",
         "phone": "+212661234567",
-        "address": "Casablanca, Morocco"
+        "address": "Casablanca, Morocco",
+        "created_at": datetime.now().isoformat()
     }
 ]
 
@@ -237,66 +303,85 @@ users_db = [
 def register(request: RegisterRequest):
     # Check if username or email already exists
     if any(u["username"] == request.username for u in users_db):
-        return {"detail": "Username already exists"}
+        raise HTTPException(status_code=400, detail="Username already exists")
     if any(u["email"] == request.email for u in users_db):
-        return {"detail": "Email already exists"}
+        raise HTTPException(status_code=400, detail="Email already exists")
     
-    # Create new user
+    # Create new user with hashed password
+    user_id = f"USER{len(users_db) + 1:03d}"
     new_user = {
-        "id": str(len(users_db) + 1),
+        "id": user_id,
         "username": request.username,
         "email": request.email,
-        "password": request.password,
+        "password": get_password_hash(request.password),
         "role": "client",
         "full_name": request.full_name,
         "phone": request.phone,
-        "address": request.address
+        "address": request.address,
+        "created_at": datetime.now().isoformat()
     }
     users_db.append(new_user)
     
+    # Create access token
+    access_token = create_access_token(
+        data={"sub": user_id, "username": request.username, "role": "client"}
+    )
+    
     return {
-        "message": "Registration successful",
+        "access_token": access_token,
+        "token_type": "bearer",
         "user": {
             "id": new_user["id"],
             "username": new_user["username"],
             "email": new_user["email"],
-            "full_name": new_user["full_name"]
+            "full_name": new_user["full_name"],
+            "role": "client"
         }
     }
 
 @app.post("/api/auth/login")
 def login(request: LoginRequest):
-    # Check against users_db
-    user = next((u for u in users_db if u["username"] == request.username and u["password"] == request.password), None)
+    # Find user by username
+    user = next((u for u in users_db if u["username"] == request.username), None)
     
-    if user:
-        return {
-            "access_token": f"token-{user['id']}",
-            "token_type": "bearer",
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "email": user["email"],
-                "role": user["role"],
-                "full_name": user["full_name"]
-            }
+    if not user or not verify_password(request.password, user["password"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Create access token
+    access_token = create_access_token(
+        data={"sub": user["id"], "username": user["username"], "role": user["role"]}
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"],
+            "role": user["role"],
+            "full_name": user["full_name"]
         }
-    return {"detail": "Invalid credentials"}
+    }
 
 @app.post("/api/admin/login")
 def admin_login(request: AdminLoginRequest):
+    # Check hardcoded admin credentials
     if request.username == "admin" and request.password == "admin123":
+        access_token = create_access_token(
+            data={"sub": "ADMIN001", "username": "admin", "role": "admin"}
+        )
         return {
-            "access_token": "admin-token-123",
+            "access_token": access_token,
             "token_type": "bearer",
             "admin": {
-                "id": "admin1",
+                "id": "ADMIN001",
                 "username": "admin",
                 "role": "admin",
                 "permissions": ["view_orders", "manage_drivers", "view_analytics"]
             }
         }
-    return {"detail": "Invalid admin credentials"}
+    raise HTTPException(status_code=401, detail="Invalid admin credentials")
 
 class DriverLoginRequest(BaseModel):
     email: str
@@ -329,13 +414,16 @@ def driver_login(request: DriverLoginRequest):
     if driver_id and request.password in ["driver123", "123"]:
         driver = next((d for d in drivers_db if d["id"] == driver_id), None)
         if driver:
+            access_token = create_access_token(
+                data={"sub": driver_id, "username": driver["email"], "role": "driver"}
+            )
             return {
-                "access_token": f"driver-token-{driver_id}",
+                "access_token": access_token,
                 "token_type": "bearer",
                 "driver": driver
             }
     
-    return {"detail": "Invalid credentials. Use driver email with password 'driver123'"}
+    raise HTTPException(status_code=401, detail="Invalid credentials. Use driver email with password 'driver123'")
 
 # Enhanced data storage with test orders
 orders_db = [
@@ -837,65 +925,172 @@ drivers_db = [
     }
 ]
 
-warehouses_db = {
-    "Casablanca": {"lat": 33.5731, "lng": -7.5898, "capacity": 1000, "current_load": 45},
-    "Rabat": {"lat": 34.0209, "lng": -6.8416, "capacity": 800, "current_load": 32},
-    "Marrakech": {"lat": 31.6295, "lng": -7.9811, "capacity": 600, "current_load": 28},
-    "El Jadida": {"lat": 33.2316, "lng": -8.5007, "capacity": 400, "current_load": 15},
-    "Salé": {"lat": 34.0531, "lng": -6.7985, "capacity": 300, "current_load": 12},
-    "Agadir": {"lat": 30.4278, "lng": -9.5981, "capacity": 500, "current_load": 22}
-}
+warehouses_db = [
+    {
+        "id": "WH001",
+        "name": "Casablanca Central Warehouse",
+        "city": "Casablanca",
+        "address": "Zone Industrielle Ain Sebaa, Casablanca",
+        "location": {"lat": 33.6089, "lng": -7.5372},
+        "capacity": 1000,
+        "current_packages": 45,
+        "status": "operational",
+        "manager": "Hassan Alami",
+        "phone": "+212520123456",
+        "operating_hours": "24/7",
+        "facilities": ["cold_storage", "loading_dock", "security"]
+    },
+    {
+        "id": "WH002",
+        "name": "Rabat Distribution Hub",
+        "city": "Rabat",
+        "address": "Technopolis, Rabat",
+        "location": {"lat": 33.9716, "lng": -6.8498},
+        "capacity": 800,
+        "current_packages": 32,
+        "status": "operational",
+        "manager": "Fatima Bennani",
+        "phone": "+212537234567",
+        "operating_hours": "06:00-22:00",
+        "facilities": ["loading_dock", "security", "sorting_area"]
+    },
+    {
+        "id": "WH003",
+        "name": "Marrakech Logistics Center",
+        "city": "Marrakech",
+        "address": "Route de Safi, Marrakech",
+        "location": {"lat": 31.6069, "lng": -8.0363},
+        "capacity": 600,
+        "current_packages": 28,
+        "status": "operational",
+        "manager": "Youssef Tazi",
+        "phone": "+212524345678",
+        "operating_hours": "07:00-20:00",
+        "facilities": ["loading_dock", "security"]
+    },
+    {
+        "id": "WH004",
+        "name": "Agadir Coastal Depot",
+        "city": "Agadir",
+        "address": "Zone Industrielle Tassila, Agadir",
+        "location": {"lat": 30.3908, "lng": -9.5598},
+        "capacity": 500,
+        "current_packages": 22,
+        "status": "operational",
+        "manager": "Amina Alaoui",
+        "phone": "+212528456789",
+        "operating_hours": "08:00-18:00",
+        "facilities": ["loading_dock", "cold_storage"]
+    },
+    {
+        "id": "WH005",
+        "name": "El Jadida Storage Facility",
+        "city": "El Jadida",
+        "address": "Zone Industrielle, El Jadida",
+        "location": {"lat": 33.2542, "lng": -8.4821},
+        "capacity": 400,
+        "current_packages": 15,
+        "status": "operational",
+        "manager": "Rachid Benali",
+        "phone": "+212523567890",
+        "operating_hours": "08:00-18:00",
+        "facilities": ["loading_dock", "security"]
+    },
+    {
+        "id": "WH006",
+        "name": "Salé Distribution Point",
+        "city": "Salé",
+        "address": "Hay Karima, Salé",
+        "location": {"lat": 34.0209, "lng": -6.7985},
+        "capacity": 300,
+        "current_packages": 12,
+        "status": "operational",
+        "manager": "Laila Tazi",
+        "phone": "+212537678901",
+        "operating_hours": "07:00-19:00",
+        "facilities": ["loading_dock", "sorting_area"]
+    }
+]
+
+# Initialize workflow managers after databases are defined
+def init_workflow_managers():
+    global inter_city_workflow, warehouse_manager
+    inter_city_workflow = InterCityWorkflow(orders_db, drivers_db, warehouses_db)
+    warehouse_manager = WarehouseManager(warehouses_db, orders_db)
+
+init_workflow_managers()
 
 @app.get("/api/orders")
-def get_user_orders():
-    """Get orders for current user"""
-    # For demo, return all orders - in production, filter by user_id
+def get_user_orders(current_user: dict = Depends(get_current_client)):
+    """Get orders for current authenticated user only"""
+    user_id = current_user["id"]
+    
+    # Filter orders by user_id
     user_orders = []
     for order in orders_db:
-        user_orders.append({
-            "id": order["id"],
-            "tracking_number": order.get("tracking_number", order["id"]),
-            "status": order["status"],
-            "sender_name": order.get("sender_name", "Test User"),
-            "receiver_name": order.get("receiver_name", "Receiver"),
-            "pickup_address": order["pickup_address"],
-            "delivery_address": order["delivery_address"],
-            "price": order.get("total_cost", order.get("price", 0)),
-            "created_at": order["created_at"],
-            "service_type": order.get("service_type", "standard"),
-            "is_inter_city": order.get("is_inter_city", False)
-        })
+        if order.get("user_id") == user_id:
+            user_orders.append({
+                "id": order["id"],
+                "tracking_number": order.get("tracking_number", order["id"]),
+                "status": order["status"],
+                "sender_name": order.get("sender_name", "Test User"),
+                "receiver_name": order.get("receiver_name", "Receiver"),
+                "pickup_address": order["pickup_address"],
+                "delivery_address": order["delivery_address"],
+                "price": order.get("total_cost", order.get("price", 0)),
+                "created_at": order["created_at"],
+                "service_type": order.get("service_type", "standard"),
+                "is_inter_city": order.get("is_inter_city", False)
+            })
     
     return user_orders
 
 @app.post("/api/orders")
-async def create_order(order: OrderCreate):
+async def create_order(order: OrderCreate, current_user: dict = Depends(get_current_client)):
     import random
     from datetime import datetime, timedelta
+    
+    print("\n" + "="*60)
+    print("🚀 NEW ORDER CREATION STARTED")
+    print("="*60)
     
     order_id = f"ORD{random.randint(1000, 9999)}"
     tracking_number = f"TRK{random.randint(100, 999)}"
     
+    print(f"📦 Order ID: {order_id}")
+    print(f"🔢 Tracking: {tracking_number}")
+    print(f"👤 Customer: {current_user['username']}")
+    
     # Enhanced pricing calculation in Dirhams
     is_inter_city = order.pickup_city.lower() != order.delivery_city.lower()
     
+    print(f"🏙️  Route: {order.pickup_city} → {order.delivery_city}")
+    print(f"📍 Type: {'INTER-CITY' if is_inter_city else 'INTRA-CITY'}")
+    
     if is_inter_city:
         # Inter-city pricing
-        base_price = 50.0  # MAD
-        distance_cost = calculate_inter_city_distance(order.pickup_city, order.delivery_city) * 0.8
-        weight_cost = order.weight * 5.0
-        dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000 * 2.0
-        warehouse_fee = 20.0 if order.delivery_type != "door_to_door" else 0
+        base_price = 50.0  # MAD (reduced from 80)
+        distance_cost = calculate_inter_city_distance(order.pickup_city, order.delivery_city) * 0.6  # Reduced from 0.8
+        weight_cost = order.weight * 4.0  # Reduced from 5.0
+        dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000 * 1.5  # Reduced from 2.0
+        warehouse_fee = 15.0 if order.delivery_type != "door_to_door" else 0
     else:
-        # Intra-city pricing
-        base_price = 25.0  # MAD
-        distance_cost = 15.0  # Average city distance
-        weight_cost = order.weight * 3.0
-        dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000 * 1.5
+        # Intra-city pricing - REDUCED for Morocco
+        base_price = 15.0  # MAD (reduced from 25)
+        distance_cost = 10.0  # Reduced from 15
+        weight_cost = order.weight * 2.0  # Reduced from 3.0
+        dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000 * 1.0  # Reduced from 1.5
         warehouse_fee = 0
     
-    service_multiplier = {"standard": 1.0, "express": 1.8}.get(order.service_type, 1.0)
+    service_multiplier = {"standard": 1.0, "express": 1.5}.get(order.service_type, 1.0)  # Reduced express from 1.8 to 1.5
     total_cost = (base_price + distance_cost + weight_cost + dimension_cost + warehouse_fee) * service_multiplier
+    
+    print(f"\n💰 PRICING CALCULATION:")
+    print(f"   Base: {base_price} MAD")
+    print(f"   Distance: {distance_cost:.2f} MAD")
+    print(f"   Weight: {weight_cost:.2f} MAD")
+    print(f"   Service: {service_multiplier}x")
+    print(f"   TOTAL: {total_cost:.2f} MAD")
     
     # Estimate delivery time
     if is_inter_city:
@@ -905,14 +1100,29 @@ async def create_order(order: OrderCreate):
     
     estimated_delivery = datetime.now() + timedelta(days=delivery_days)
     
+    # Generate and store coordinates - use provided coordinates or generate from address
+    if order.pickup_coordinates:
+        pickup_coords = order.pickup_coordinates
+    else:
+        pickup_coords = generate_address_coordinates(order.pickup_city, order.pickup_address)
+    
+    if order.delivery_coordinates:
+        delivery_coords = order.delivery_coordinates
+    else:
+        delivery_coords = generate_address_coordinates(order.delivery_city, order.delivery_address)
+    
     new_order = {
         "id": order_id,
         "tracking_number": tracking_number,
+        "user_id": current_user["id"],
+        "username": current_user["username"],
         "status": "pending_assignment",
         "pickup_address": order.pickup_address,
         "delivery_address": order.delivery_address,
         "pickup_city": order.pickup_city,
         "delivery_city": order.delivery_city,
+        "pickup_coordinates": pickup_coords,
+        "delivery_coordinates": delivery_coords,
         "weight": order.weight,
         "dimensions": order.dimensions,
         "service_type": order.service_type,
@@ -935,10 +1145,14 @@ async def create_order(order: OrderCreate):
     
     orders_db.append(new_order)
     
+    print(f"\n🤖 AI AGENT PROCESSING:")
+    
     # Get available drivers in the pickup city
     city_drivers = [d for d in drivers_db if 
                    d.get("status") in ["available", "online"] and 
                    d.get("assigned_city", d.get("current_location", {}).get("city", "")).lower() == order.pickup_city.lower()]
+    
+    print(f"   Found {len(city_drivers)} available drivers in {order.pickup_city}")
     
     # If no drivers in same city, get nearby drivers
     if not city_drivers:
@@ -953,45 +1167,72 @@ async def create_order(order: OrderCreate):
             )
         city_drivers = sorted(available_drivers, key=lambda d: d.get("_temp_distance", 999))[:3]
     
-    # Smart driver assignment with AI workflow
+    # Smart driver assignment - ONLY same city drivers for intra-city
     assignment_service = SmartAssignmentService()
     
-    # Process order through AI workflow (auto-detects intra/inter city)
-    try:
-        workflow_result = await process_delivery_order(new_order, city_drivers)
-        if workflow_result and "best_driver" in workflow_result:
-            best_driver = workflow_result["best_driver"]
-            new_order["ai_workflow"] = workflow_result.get("workflow")
-            new_order["agents_used"] = workflow_result.get("agents_used", [])
-        else:
-            best_driver = await assignment_service.find_best_driver(new_order, city_drivers)
-    except:
-        best_driver = await assignment_service.find_best_driver(new_order, city_drivers)
-    
-    if best_driver:
-        new_order["assigned_driver"] = best_driver["id"]
-        new_order["status"] = "pending_acceptance"
-        new_order["assignment_attempts"] = 1
-    else:
-        # Force assign to city-based driver as fallback
-        fallback_driver = None
-        
-        # First try: Same city drivers
+    # For intra-city: STRICT city matching, auto-accept
+    if not is_inter_city:
+        print(f"\n🎯 INTRA-CITY ASSIGNMENT (Auto-Accept):")
+        # Only drivers from the SAME city
         same_city_drivers = [d for d in drivers_db if 
                            d.get("status") in ["available", "online"] and
-                           d.get("assigned_city", d.get("current_location", {}).get("city", "")).lower() == order.pickup_city.lower()]
+                           d.get("assigned_city", "").lower() == order.pickup_city.lower()]
         
+        print(f"   Analyzing {len(same_city_drivers)} drivers...")
         if same_city_drivers:
-            fallback_driver = same_city_drivers[0]
+            print(f"   🧠 AI Agent: Calculating best driver match...")
+            best_driver = await assignment_service.find_best_driver(new_order, same_city_drivers)
+            if best_driver:
+                print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
+                print(f"   📊 Rating: {best_driver['rating']}/5.0")
+                print(f"   🚗 Vehicle: {best_driver['vehicle_type'].upper()}")
+                new_order["assigned_driver"] = best_driver["id"]
+                new_order["status"] = "assigned"  # Auto-accept for intra-city
+                best_driver["current_orders"].append(order_id)
+                best_driver["status"] = "busy"
+                print(f"   ⚡ Status: AUTO-ACCEPTED")
+            else:
+                print(f"   ❌ No suitable driver found")
         else:
-            # Second try: Any available driver
-            fallback_driver = next((d for d in drivers_db if d.get("status") in ["available", "online"]), None)
+            print(f"   ⚠️  No available drivers in {order.pickup_city}")
+    else:
+        print(f"\n🌍 INTER-CITY ASSIGNMENT (Manual Accept):")
+        # For inter-city: use existing workflow
+        best_driver = None
+        if WORKFLOW_AVAILABLE:
+            try:
+                print(f"   🤖 AI Workflow: Processing inter-city delivery...")
+                workflow_result = await process_delivery_order(new_order, city_drivers)
+                if workflow_result and "best_driver" in workflow_result:
+                    best_driver = workflow_result["best_driver"]
+                    new_order["ai_workflow"] = workflow_result.get("workflow")
+                    new_order["agents_used"] = workflow_result.get("agents_used", [])
+                    print(f"   ✅ Workflow completed")
+            except Exception as e:
+                print(f"   ⚠️  Workflow error: {e}")
         
-        if fallback_driver:
-            new_order["assigned_driver"] = fallback_driver["id"]
-            new_order["status"] = "assigned"
-            fallback_driver["current_orders"].append(order_id)
-            fallback_driver["status"] = "busy"
+        if not best_driver:
+            print(f"   🧠 AI Agent: Finding best driver...")
+            best_driver = await assignment_service.find_best_driver(new_order, city_drivers)
+        
+        if best_driver:
+            print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
+            print(f"   📊 Rating: {best_driver['rating']}/5.0")
+            new_order["assigned_driver"] = best_driver["id"]
+            new_order["status"] = "pending_acceptance"
+            new_order["assignment_attempts"] = 1
+            print(f"   ⏳ Status: PENDING DRIVER ACCEPTANCE")
+        else:
+            print(f"   ❌ No suitable driver found")
+    
+    print("\n" + "="*60)
+    print("✅ ORDER CREATED SUCCESSFULLY")
+    print("="*60 + "\n")
+    
+    # Start delivery simulation if order is assigned
+    if new_order.get("assigned_driver") and new_order["status"] == "assigned":
+        simulator.start_simulation(order_id, new_order, orders_db)
+        print(f"🎬 Delivery simulation started for order {order_id}")
     
     return new_order
 
@@ -1008,6 +1249,10 @@ def driver_assignment_response(response_data: dict):
     
     if not order or not driver:
         return {"error": "Order or driver not found"}
+    
+    # Intra-city orders are auto-accepted, no manual response needed
+    if not order.get("is_inter_city", False):
+        return {"error": "Intra-city orders are automatically accepted"}
     
     # Track assignment history
     if 'assignment_history' not in order:
@@ -1115,7 +1360,7 @@ def complete_delivery_final(completion_data: dict):
     return {"error": "Order or driver not found"}
 
 @app.get("/api/admin/orders")
-def get_all_orders():
+def get_all_orders(current_admin: dict = Depends(get_current_admin)):
     # Add customer information to orders
     enriched_orders = []
     for order in orders_db:
@@ -1132,47 +1377,37 @@ def get_all_orders():
     return {"orders": enriched_orders, "total": len(enriched_orders)}
 
 @app.get("/api/admin/drivers")
-def get_all_drivers():
-    return {"drivers": drivers_db, "total": len(drivers_db)}
+def get_all_drivers(current_admin: dict = Depends(get_current_admin)):
+    enriched_drivers = []
+    for driver in drivers_db:
+        # Calculate actual deliveries from orders
+        completed_deliveries = len([
+            o for o in orders_db 
+            if o.get("assigned_driver") == driver["id"] and o["status"] == "delivered"
+        ])
+        
+        enriched_driver = driver.copy()
+        enriched_driver["total_deliveries"] = completed_deliveries
+        enriched_drivers.append(enriched_driver)
+    
+    return {"drivers": enriched_drivers, "total": len(enriched_drivers)}
 
 @app.get("/api/admin/analytics")
-def get_admin_analytics():
+def get_admin_analytics(current_admin: dict = Depends(get_current_admin)):
     total_orders = len(orders_db)
     pending_orders = len([o for o in orders_db if o["status"] in ["pending_assignment", "pending_acceptance"]])
     in_progress = len([o for o in orders_db if o["status"] in ["picked_up", "in_transit", "assigned", "accepted"]])
     completed = len([o for o in orders_db if o["status"] == "delivered"])
-    active_drivers = len([d for d in drivers_db if d["status"] in ["available", "busy"]])
+    active_drivers = len([d for d in drivers_db if d["status"] in ["available", "busy", "online"]])
     
-    # Calculate revenue from both total_cost and price fields
-    revenue = 0
-    for order in orders_db:
-        if order["status"] == "delivered":
-            revenue += order.get("total_cost", order.get("price", 0))
-    
-    # Additional analytics
-    intra_city_orders = len([o for o in orders_db if not o.get("is_inter_city", False)])
-    inter_city_orders = len([o for o in orders_db if o.get("is_inter_city", False)])
-    express_orders = len([o for o in orders_db if o.get("service_type") == "express"])
-    standard_orders = len([o for o in orders_db if o.get("service_type") == "standard"])
-    
-    # Driver performance
-    top_driver = max(drivers_db, key=lambda d: d.get("total_deliveries", 0)) if drivers_db else None
-    avg_rating = sum([d.get("rating", 0) for d in drivers_db]) / len(drivers_db) if drivers_db else 0
+    revenue = sum([o.get("total_cost", o.get("price", 0)) for o in orders_db if o["status"] == "delivered"])
     
     return {
         "total_orders": total_orders,
         "pending_orders": pending_orders,
         "in_progress": in_progress,
         "completed": completed,
-        "active_drivers": active_drivers,
-        "revenue": round(revenue, 2),
-        "intra_city_orders": intra_city_orders,
-        "inter_city_orders": inter_city_orders,
-        "express_orders": express_orders,
-        "standard_orders": standard_orders,
-        "top_driver": top_driver["name"] if top_driver else "N/A",
-        "average_driver_rating": round(avg_rating, 2),
-        "delivery_success_rate": round((completed / total_orders * 100), 1) if total_orders > 0 else 0
+        "active_drivers": active_drivers
     }
 
 def calculate_inter_city_distance(city1: str, city2: str) -> float:
@@ -1420,6 +1655,17 @@ def get_city_coordinates(city: str) -> dict:
     }
     return coordinates.get(city.lower(), coordinates["casablanca"])
 
+def generate_address_coordinates(city: str, address: str) -> dict:
+    """Generate consistent coordinates for an address using hash"""
+    base = get_city_coordinates(city)
+    hash_val = sum(ord(c) for c in address)
+    offset_lat = ((hash_val % 100) / 1000) - 0.05
+    offset_lng = (((hash_val * 7) % 100) / 1000) - 0.05
+    return {
+        "lat": base["lat"] + offset_lat,
+        "lng": base["lng"] + offset_lng
+    }
+
 def calculate_gps_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Calculate distance between GPS coordinates in km"""
     import math
@@ -1657,46 +1903,56 @@ def update_delivery_status(order_id: str, update: DeliveryUpdate):
 
 @app.get("/api/orders/{order_id}/track")
 def track_order(order_id: str):
-    order = next((o for o in orders_db if o["id"] == order_id), None)
-    if not order:
-        return {"error": "Order not found"}
-    
-    driver_info = None
-    if order["assigned_driver"]:
-        driver_info = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
-    
-    # Get coordinates
-    pickup_coords = get_city_coordinates(order["pickup_city"])
-    delivery_coords = get_city_coordinates(order["delivery_city"])
-    
-    # Get current package location
-    current_package_location = get_current_package_location(order, pickup_coords, delivery_coords)
-    
-    # Build tracking events
-    tracking_events = build_tracking_events(order, driver_info)
-    
-    # Warehouse info for inter-city orders
-    warehouse_info = None
-    if order.get("is_inter_city"):
-        warehouse_info = {
-            "origin_warehouse": warehouses_db.get(order["pickup_city"]),
-            "destination_warehouse": warehouses_db.get(order["delivery_city"]),
-            "current_warehouse": order.get("current_warehouse"),
-            "processing_status": order.get("warehouse_status", "not_processed")
+    try:
+        order = next((o for o in orders_db if o["id"] == order_id), None)
+        if not order:
+            return {"error": "Order not found"}
+        
+        driver_info = None
+        if order.get("assigned_driver"):
+            driver_info = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
+        
+        # Get coordinates - use stored coordinates if available
+        pickup_coords = order.get("pickup_coordinates") or get_city_coordinates(order["pickup_city"])
+        delivery_coords = order.get("delivery_coordinates") or get_city_coordinates(order["delivery_city"])
+        
+        # Get current package location
+        current_package_location = get_current_package_location(order, pickup_coords, delivery_coords)
+        
+        # Build tracking events
+        tracking_events = build_tracking_events(order, driver_info)
+        
+        # Warehouse info for inter-city orders
+        warehouse_info = None
+        if order.get("is_inter_city"):
+            origin_wh = next((w for w in warehouses_db if w["city"] == order["pickup_city"]), None)
+            dest_wh = next((w for w in warehouses_db if w["city"] == order["delivery_city"]), None)
+            warehouse_info = {
+                "origin_warehouse": origin_wh,
+                "destination_warehouse": dest_wh,
+                "current_warehouse": order.get("current_warehouse"),
+                "processing_status": order.get("warehouse_status", "not_processed")
+            }
+        
+        return {
+            "order": order,
+            "driver": driver_info,
+            "tracking_history": order.get("route_history", []),
+            "estimated_arrival": order.get("estimated_delivery"),
+            "pickup_coordinates": pickup_coords,
+            "delivery_coordinates": delivery_coords,
+            "current_package_location": current_package_location,
+            "warehouse_info": warehouse_info,
+            "tracking_events": tracking_events,
+            "progress_percentage": calculate_delivery_progress(order["status"])
         }
-    
-    return {
-        "order": order,
-        "driver": driver_info,
-        "tracking_history": order.get("route_history", []),
-        "estimated_arrival": order.get("estimated_delivery"),
-        "pickup_coordinates": pickup_coords,
-        "delivery_coordinates": delivery_coords,
-        "current_package_location": current_package_location,
-        "warehouse_info": warehouse_info,
-        "tracking_events": tracking_events,
-        "progress_percentage": calculate_delivery_progress(order["status"])
-    }
+    except Exception as e:
+        print(f"Error in track_order: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.get("/api/orders/tracking/{tracking_number}")
 def track_order_by_tracking_number(tracking_number: str):
@@ -1708,9 +1964,9 @@ def track_order_by_tracking_number(tracking_number: str):
     if order.get("assigned_driver"):
         driver_info = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
     
-    # Calculate distance and duration
-    pickup_coords = get_city_coordinates(order["pickup_city"])
-    delivery_coords = get_city_coordinates(order["delivery_city"])
+    # Calculate distance and duration - use stored coordinates
+    pickup_coords = order.get("pickup_coordinates") or get_city_coordinates(order["pickup_city"])
+    delivery_coords = order.get("delivery_coordinates") or get_city_coordinates(order["delivery_city"])
     distance = calculate_gps_distance(
         pickup_coords["lat"], pickup_coords["lng"],
         delivery_coords["lat"], delivery_coords["lng"]
@@ -1725,9 +1981,11 @@ def track_order_by_tracking_number(tracking_number: str):
     # Warehouse info for inter-city orders
     warehouse_info = None
     if order.get("is_inter_city"):
+        origin_wh = next((w for w in warehouses_db if w["city"] == order["pickup_city"]), None)
+        dest_wh = next((w for w in warehouses_db if w["city"] == order["delivery_city"]), None)
         warehouse_info = {
-            "origin_warehouse": warehouses_db.get(order["pickup_city"]),
-            "destination_warehouse": warehouses_db.get(order["delivery_city"]),
+            "origin_warehouse": origin_wh,
+            "destination_warehouse": dest_wh,
             "current_warehouse": order.get("current_warehouse"),
             "processing_status": order.get("warehouse_status", "not_processed")
         }
@@ -1749,7 +2007,22 @@ def track_order_by_tracking_number(tracking_number: str):
 
 @app.get("/api/warehouses")
 def get_warehouses():
-    return warehouses_db
+    # Return warehouses with current package counts
+    enriched_warehouses = []
+    for warehouse in warehouses_db:
+        # Count packages currently at this warehouse
+        packages_at_warehouse = len([
+            o for o in orders_db 
+            if o.get("current_warehouse") == warehouse["city"] or
+            (o.get("status") in ["at_origin_warehouse", "warehouse_processing"] and o.get("pickup_city") == warehouse["city"]) or
+            (o.get("status") == "at_destination_warehouse" and o.get("delivery_city") == warehouse["city"])
+        ])
+        
+        enriched_warehouse = warehouse.copy()
+        enriched_warehouse["current_packages"] = packages_at_warehouse
+        enriched_warehouses.append(enriched_warehouse)
+    
+    return enriched_warehouses
 
 @app.get("/api/weather/{city}")
 def get_weather(city: str):
@@ -1765,6 +2038,98 @@ def get_weather(city: str):
         "impact_on_delivery": random.choice(["None", "Minimal", "Moderate"])
     }
     return weather_data
+
+@app.post("/api/routing/optimize")
+async def optimize_route(route_request: dict):
+    """Generate optimized route using OSRM public endpoint"""
+    import requests
+    
+    start = route_request.get('start_location', {})
+    waypoints = route_request.get('waypoints', [])
+    
+    if not waypoints or len(waypoints) < 2:
+        return {"route": [], "distance": 0, "duration": 0}
+    
+    pickup = waypoints[0]
+    delivery = waypoints[1]
+    
+    try:
+        # Use OSRM public endpoint
+        osrm_url = f"http://router.project-osrm.org/route/v1/driving/{start['lng']},{start['lat']};{pickup['lng']},{pickup['lat']};{delivery['lng']},{delivery['lat']}"
+        params = {
+            'overview': 'full',
+            'geometries': 'geojson',
+            'steps': 'true'
+        }
+        
+        response = requests.get(osrm_url, params=params, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if data.get('routes'):
+                route_data = data['routes'][0]
+                geometry = route_data['geometry']['coordinates']
+                
+                # Convert OSRM coordinates to our format
+                route = []
+                total_points = len(geometry)
+                pickup_index = total_points // 3
+                
+                for i, coord in enumerate(geometry):
+                    route.append({
+                        'lat': coord[1],
+                        'lng': coord[0],
+                        'type': 'to_pickup' if i < pickup_index else 'to_delivery'
+                    })
+                
+                return {
+                    'route': route,
+                    'distance': round(route_data['distance'] / 1000, 2),
+                    'duration': round(route_data['duration'] / 60, 0),
+                    'optimized': True,
+                    'source': 'OSRM'
+                }
+        else:
+            print(f"OSRM API error: {response.status_code}")
+    except Exception as e:
+        print(f"OSRM routing failed: {e}, using fallback")
+    
+    # Fallback: Generate curved route
+    route = []
+    for i in range(16):
+        ratio = i / 15
+        curve_offset_lat = 0.002 * math.sin(ratio * math.pi)
+        curve_offset_lng = 0.002 * math.cos(ratio * math.pi)
+        route.append({
+            'lat': start['lat'] + (pickup['lat'] - start['lat']) * ratio + curve_offset_lat,
+            'lng': start['lng'] + (pickup['lng'] - start['lng']) * ratio + curve_offset_lng,
+            'type': 'to_pickup'
+        })
+    
+    for i in range(1, 21):
+        ratio = i / 20
+        curve_offset_lat = 0.003 * math.sin(ratio * math.pi * 2)
+        curve_offset_lng = 0.003 * math.cos(ratio * math.pi * 1.5)
+        route.append({
+            'lat': pickup['lat'] + (delivery['lat'] - pickup['lat']) * ratio + curve_offset_lat,
+            'lng': pickup['lng'] + (delivery['lng'] - pickup['lng']) * ratio + curve_offset_lng,
+            'type': 'to_delivery'
+        })
+    
+    total_distance = calculate_gps_distance(
+        start['lat'], start['lng'], pickup['lat'], pickup['lng']
+    ) + calculate_gps_distance(
+        pickup['lat'], pickup['lng'], delivery['lat'], delivery['lng']
+    )
+    
+    return {
+        'route': route,
+        'distance': round(total_distance, 2),
+        'duration': round(total_distance * 2, 0),
+        'optimized': True,
+        'source': 'Fallback'
+    }
 
 @app.get("/api/route/{pickup_city}/{delivery_city}")
 def get_route_info(pickup_city: str, delivery_city: str):
@@ -1828,7 +2193,7 @@ def get_supported_cities():
     }
 
 @app.post("/api/inter-city/orders")
-def create_inter_city_order(order: InterCityOrderCreate):
+async def create_inter_city_order(order: InterCityOrderCreate, current_user: dict = Depends(get_current_client)):
     import random
     
     order_id = f"IC{random.randint(1000, 9999)}"
@@ -1863,14 +2228,29 @@ def create_inter_city_order(order: InterCityOrderCreate):
     
     estimated_delivery = datetime.now() + timedelta(days=delivery_days)
     
+    # Generate and store coordinates - use provided coordinates or generate from address
+    if order.pickup_coordinates:
+        pickup_coords = order.pickup_coordinates
+    else:
+        pickup_coords = generate_address_coordinates(order.pickup_city, order.pickup_address)
+    
+    if order.delivery_coordinates:
+        delivery_coords = order.delivery_coordinates
+    else:
+        delivery_coords = generate_address_coordinates(order.delivery_city, order.delivery_address)
+    
     new_order = {
         "id": order_id,
         "tracking_number": tracking_number,
-        "status": "pending_pickup" if order.pickup_option == "door_pickup" else "pending_warehouse_dropoff",
+        "user_id": current_user["id"],
+        "username": current_user["username"],
+        "status": "pending_assignment" if order.pickup_option == "door_pickup" else "pending_warehouse_dropoff",
         "pickup_address": order.pickup_address,
         "delivery_address": order.delivery_address,
         "pickup_city": order.pickup_city,
         "delivery_city": order.delivery_city,
+        "pickup_coordinates": pickup_coords,
+        "delivery_coordinates": delivery_coords,
         "weight": order.weight,
         "dimensions": order.dimensions,
         "service_type": order.service_type,
@@ -1899,11 +2279,17 @@ def create_inter_city_order(order: InterCityOrderCreate):
     
     # Assign pickup driver if door pickup
     if order.pickup_option == "door_pickup":
-        pickup_driver = assign_best_driver(new_order)
-        if pickup_driver:
-            new_order["assigned_driver"] = pickup_driver["id"]
-            new_order["status"] = "assigned_for_pickup"
-            pickup_driver["current_orders"].append(order_id)
+        city_drivers = [d for d in drivers_db if 
+                       d.get("status") in ["available", "online"] and 
+                       d.get("assigned_city", "").lower() == order.pickup_city.lower()]
+        
+        if city_drivers:
+            assignment_service = SmartAssignmentService()
+            pickup_driver = await assignment_service.find_best_driver(new_order, city_drivers)
+            if pickup_driver:
+                new_order["assigned_driver"] = pickup_driver["id"]
+                new_order["status"] = "pending_acceptance"
+                new_order["assignment_attempts"] = 1
     
     return new_order
 
@@ -1928,9 +2314,11 @@ def track_inter_city_order(tracking_number: str):
     # Get warehouse status if applicable
     warehouse_info = None
     if order["is_inter_city"]:
+        origin_wh = next((w for w in warehouses_db if w["city"] == order["pickup_city"]), None)
+        dest_wh = next((w for w in warehouses_db if w["city"] == order["delivery_city"]), None)
         warehouse_info = {
-            "origin_warehouse": warehouses_db.get(order["pickup_city"], {}),
-            "destination_warehouse": warehouses_db.get(order["delivery_city"], {}),
+            "origin_warehouse": origin_wh,
+            "destination_warehouse": dest_wh,
             "current_warehouse": order.get("current_warehouse"),
             "processing_status": order.get("warehouse_status", "not_processed")
         }
@@ -1954,8 +2342,9 @@ def warehouse_dropoff(order_id: str, dropoff_data: dict):
     order["current_warehouse"] = order["pickup_city"]
     
     # Update warehouse load
-    if order["pickup_city"] in warehouses_db:
-        warehouses_db[order["pickup_city"]]["current_load"] += 1
+    warehouse = next((w for w in warehouses_db if w["city"] == order["pickup_city"]), None)
+    if warehouse:
+        warehouse["current_packages"] = warehouse.get("current_packages", 0) + 1
     
     # Send notification
     send_notification({
@@ -1979,8 +2368,9 @@ def process_warehouse_package(order_id: str):
     order["dispatch_time"] = datetime.now().isoformat()
     
     # Update warehouse load
-    if order["current_warehouse"] in warehouses_db:
-        warehouses_db[order["current_warehouse"]]["current_load"] -= 1
+    warehouse = next((w for w in warehouses_db if w["city"] == order.get("current_warehouse")), None)
+    if warehouse:
+        warehouse["current_packages"] = max(0, warehouse.get("current_packages", 0) - 1)
     
     # Set destination warehouse
     order["current_warehouse"] = order["delivery_city"]
@@ -2122,8 +2512,12 @@ def accept_assignment(driver_id: str, acceptance: AssignmentAcceptance):
     if not driver or not order:
         return {"error": "Driver or order not found"}
     
+    # Intra-city orders are auto-accepted
+    if not order.get("is_inter_city", False):
+        return {"error": "Intra-city orders are automatically accepted and assigned"}
+    
     if acceptance.accepted:
-        # Accept assignment
+        # Accept assignment (inter-city only)
         order["assigned_driver"] = driver_id
         order["status"] = "accepted"
         order["accepted_at"] = datetime.now().isoformat()
@@ -2178,8 +2572,11 @@ def get_driver_dashboard(driver_id: str):
     pending_deliveries = len([o for o in driver_orders if o["status"] in ["assigned", "picked_up", "in_transit", "accepted"]])
     total_earnings = sum([o.get("total_cost", o.get("price", 0)) * 0.15 for o in driver_orders if o["status"] == "delivered"])  # 15% commission
     
-    # Get pending assignments (orders waiting for driver acceptance)
-    pending_assignments = [o for o in orders_db if o.get("assigned_driver") == driver_id and o["status"] == "pending_acceptance"]
+    # Get pending assignments (only inter-city orders need acceptance)
+    pending_assignments = [o for o in orders_db 
+                          if o.get("assigned_driver") == driver_id and 
+                          o["status"] == "pending_acceptance" and
+                          o.get("is_inter_city", False)]
     
     return {
         "driver": driver,
@@ -2424,19 +2821,19 @@ def get_current_package_location(order: dict, pickup_coords: dict, delivery_coor
     # Inter-city warehouse locations
     if order.get("is_inter_city"):
         if status in ["at_origin_warehouse", "warehouse_processing"]:
-            warehouse = warehouses_db.get(order["pickup_city"])
+            warehouse = next((w for w in warehouses_db if w["city"] == order["pickup_city"]), None)
             return {
-                "lat": warehouse["lat"] if warehouse else pickup_coords["lat"],
-                "lng": warehouse["lng"] if warehouse else pickup_coords["lng"],
+                "lat": warehouse["location"]["lat"] if warehouse else pickup_coords["lat"],
+                "lng": warehouse["location"]["lng"] if warehouse else pickup_coords["lng"],
                 "description": f"Package at {order['pickup_city']} warehouse",
                 "type": "warehouse"
             }
         
         if status == "at_destination_warehouse":
-            warehouse = warehouses_db.get(order["delivery_city"])
+            warehouse = next((w for w in warehouses_db if w["city"] == order["delivery_city"]), None)
             return {
-                "lat": warehouse["lat"] if warehouse else delivery_coords["lat"],
-                "lng": warehouse["lng"] if warehouse else delivery_coords["lng"],
+                "lat": warehouse["location"]["lat"] if warehouse else delivery_coords["lat"],
+                "lng": warehouse["location"]["lng"] if warehouse else delivery_coords["lng"],
                 "description": f"Package at {order['delivery_city']} warehouse",
                 "type": "warehouse"
             }
@@ -2587,6 +2984,67 @@ async def track_order_websocket(websocket: WebSocket, order_id: str):
             await asyncio.sleep(30)  # Update every 30 seconds
     except WebSocketDisconnect:
         pass
+
+# ============================================================================
+# INTER-CITY WORKFLOW ENDPOINTS
+# ============================================================================
+
+@app.post("/api/inter-city/workflow/start/{order_id}")
+async def start_inter_city_workflow(order_id: str):
+    """Start inter-city workflow for an order"""
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    if not order or not order.get("is_inter_city"):
+        return {"error": "Order not found or not inter-city"}
+    
+    workflow_result = await inter_city_workflow.process_inter_city_order(order)
+    return workflow_result
+
+@app.post("/api/warehouse/receive/{order_id}")
+def warehouse_receive_package(order_id: str):
+    """Receive package at origin warehouse"""
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    if not order:
+        return {"error": "Order not found"}
+    
+    result = warehouse_manager.receive_package(order_id, order["pickup_city"])
+    return result
+
+@app.post("/api/warehouse/consolidate")
+def consolidate_warehouse_batch(origin_city: str, destination_city: str):
+    """Consolidate packages for inter-city transport"""
+    batch = warehouse_manager.consolidate_batch(origin_city, destination_city)
+    return batch
+
+@app.post("/api/warehouse/dispatch")
+def dispatch_inter_city_truck(origin_city: str, destination_city: str):
+    """Dispatch inter-city truck with consolidated batch"""
+    result = warehouse_manager.schedule_dispatch(origin_city, destination_city)
+    return result
+
+@app.post("/api/warehouse/receive-batch")
+def receive_batch_at_destination(origin_city: str, destination_city: str):
+    """Receive batch at destination warehouse"""
+    result = warehouse_manager.receive_at_destination(origin_city, destination_city)
+    return result
+
+@app.post("/api/warehouse/assign-final-delivery/{order_id}")
+def assign_final_delivery_driver(order_id: str):
+    """Assign driver for final delivery from destination warehouse"""
+    result = warehouse_manager.assign_final_delivery(order_id, drivers_db)
+    return result
+
+@app.get("/api/warehouse/status/{city}")
+def get_warehouse_status_endpoint(city: str):
+    """Get warehouse status and statistics"""
+    status = warehouse_manager.get_warehouse_status(city)
+    return status
+
+@app.post("/api/workflow/update-status/{order_id}")
+def update_workflow_status(order_id: str, status_data: dict):
+    """Update order status through workflow stages"""
+    new_status = status_data.get("status")
+    result = inter_city_workflow.update_order_status(order_id, new_status)
+    return result
 
 if __name__ == "__main__":
     print("=" * 80)
