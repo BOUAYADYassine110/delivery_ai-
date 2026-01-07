@@ -2,12 +2,20 @@
 Storage Layer - Switches between in-memory and MongoDB
 """
 import os
+import sys
 from datetime import datetime
+
+# Fix encoding for Windows
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
 
 USE_MONGODB = os.getenv("USE_MONGODB", "false").lower() == "true"
 
 if USE_MONGODB:
-    print("🗄️  Using MongoDB for data persistence")
+    print("[MongoDB] Using MongoDB for data persistence")
     from pymongo import MongoClient
     from bson import ObjectId
     
@@ -36,13 +44,13 @@ if USE_MONGODB:
     
     # Initialize with default data if empty
     if drivers_col.count_documents({}) == 0:
-        print("🌱 Seeding MongoDB with default data...")
+        print("[MongoDB] Seeding with default data...")
         from seed_data import get_default_drivers, get_default_warehouses, get_default_admin, get_default_test_user
         
         drivers_col.insert_many(get_default_drivers())
         warehouses_col.insert_many(get_default_warehouses())
         users_col.insert_one(get_default_test_user())
-        print("✅ MongoDB seeded with 16 drivers, 6 warehouses, 1 test user")
+        print("[MongoDB] Seeded with 16 drivers, 6 warehouses, 1 test user")
     
     class MongoDBStorage:
         @staticmethod
@@ -96,7 +104,7 @@ if USE_MONGODB:
     storage = MongoDBStorage()
     
 else:
-    print("💾 Using in-memory storage (data will be lost on restart)")
+    print("[In-Memory] Using in-memory storage (data will be lost on restart)")
     
     class InMemoryStorage:
         def __init__(self):

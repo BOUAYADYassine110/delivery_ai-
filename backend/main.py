@@ -32,7 +32,7 @@ from api.services.warehouse_manager import WarehouseManager
 
 # Try to import CrewAI services (optional)
 try:
-    from api.services.crew_service import get_agent_status, get_driver_recommendation, get_price_calculation
+    from api.services.agent_service import AgentService
     from api.services.warehouse_agent import (
         check_warehouse_capacity, optimize_warehouse_routing, 
         coordinate_warehouse_transport, predict_warehouse_capacity,
