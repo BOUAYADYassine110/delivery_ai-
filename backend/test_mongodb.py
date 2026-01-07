@@ -1,77 +1,69 @@
-#!/usr/bin/env python3
 """
-Quick MongoDB Connection Test
-Run this to check if MongoDB is working
+Test MongoDB Integration
+Run this to verify MongoDB is working
 """
+import os
+from dotenv import load_dotenv
 
-import sys
+load_dotenv()
 
-def test_mongodb():
-    print("=" * 60)
-    print("🔍 Testing MongoDB Connection...")
-    print("=" * 60)
+print("="*60)
+print("TESTING MONGODB INTEGRATION")
+print("="*60)
+
+# Check environment variable
+use_mongodb = os.getenv("USE_MONGODB", "false").lower() == "true"
+print(f"\n1. USE_MONGODB setting: {use_mongodb}")
+
+if not use_mongodb:
+    print("\nMongoDB is DISABLED")
+    print("Set USE_MONGODB=true in .env to enable")
+    exit(1)
+
+print("\nMongoDB is ENABLED")
+
+# Test MongoDB connection
+print("\n2. Testing MongoDB connection...")
+try:
+    from pymongo import MongoClient
     
-    try:
-        from pymongo import MongoClient
-        
-        # Try to connect
-        print("\n1️⃣ Attempting to connect to MongoDB...")
-        client = MongoClient("mongodb://localhost:27017", serverSelectionTimeoutMS=5000)
-        
-        # Ping the database
-        print("2️⃣ Pinging MongoDB server...")
-        client.admin.command('ping')
-        print("   ✅ MongoDB is responding!")
-        
-        # Check database
-        print("\n3️⃣ Checking delivery_system database...")
-        db = client.delivery_system
-        collections = db.list_collection_names()
-        
-        if collections:
-            print(f"   ✅ Found {len(collections)} collections:")
-            for col in collections:
-                count = db[col].count_documents({})
-                print(f"      • {col}: {count} documents")
-        else:
-            print("   ⚠️  No collections found (database is empty)")
-            print("   💡 Run 'python init_mongodb.py' to seed the database")
-        
-        # Summary
-        print("\n" + "=" * 60)
-        print("✅ SUCCESS: MongoDB is working!")
-        print("=" * 60)
-        print("\n📍 Next steps:")
-        if not collections:
-            print("   1. Run: python backend/init_mongodb.py")
-            print("   2. Start backend: python backend/main.py")
-        else:
-            print("   • MongoDB is ready to use")
-            print("   • Start backend: python backend/main.py")
-        
-        return True
-        
-    except ImportError:
-        print("\n❌ ERROR: pymongo not installed")
-        print("   Fix: pip install pymongo")
-        return False
-        
-    except Exception as e:
-        print(f"\n❌ ERROR: {str(e)}")
-        print("\n💡 Troubleshooting:")
-        print("   1. Is MongoDB installed?")
-        print("      • Windows: Download from mongodb.com")
-        print("      • Mac: brew install mongodb-community")
-        print("      • Linux: sudo apt install mongodb")
-        print("\n   2. Is MongoDB running?")
-        print("      • Windows: Check Services for 'MongoDB'")
-        print("      • Mac/Linux: sudo systemctl status mongod")
-        print("\n   3. Start MongoDB:")
-        print("      • Windows: net start MongoDB")
-        print("      • Mac: brew services start mongodb-community")
-        print("      • Linux: sudo systemctl start mongod")
-        return False
-
-if __name__ == "__main__":
-    success = test_mongodb()
-    sys.exit(0 if success else 1)
+    mongodb_url = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    client = MongoClient(mongodb_url, serverSelectionTimeoutMS=2000)
+    client.admin.command('ping')
+    print(f"Connected to MongoDB at {mongodb_url}")
+    
+    # Check database
+    db_name = os.getenv("DATABASE_NAME", "delivery_system")
+    db = client[db_name]
+    
+    # Check collections
+    collections = db.list_collection_names()
+    print(f"\n3. Database: {db_name}")
+    print(f"   Collections: {collections if collections else 'None (will be created on first use)'}")
+    
+    # Check data
+    drivers_count = db.drivers.count_documents({})
+    orders_count = db.orders.count_documents({})
+    users_count = db.users.count_documents({})
+    
+    print(f"\n4. Current data:")
+    print(f"   Drivers: {drivers_count}")
+    print(f"   Orders: {orders_count}")
+    print(f"   Users: {users_count}")
+    
+    if drivers_count == 0:
+        print("\nDatabase is empty - will be seeded on first backend start")
+    
+    print("\n" + "="*60)
+    print("MONGODB IS WORKING!")
+    print("="*60)
+    print("\nStart backend with: python main.py")
+    print("Data will now persist between restarts!")
+    
+except Exception as e:
+    print(f"\nMongoDB connection failed: {e}")
+    print("\nSolutions:")
+    print("   1. Install MongoDB locally")
+    print("   2. OR use MongoDB Atlas (free): https://www.mongodb.com/cloud/atlas")
+    print("   3. Update MONGODB_URL in .env with your connection string")
+    exit(1)

@@ -51,7 +51,9 @@ async def seed_default_data():
     print("🌱 Seeding database with default data...")
     
     # Import default data
-    from .seed_data import get_default_drivers, get_default_warehouses, get_default_admin
+    import sys
+    sys.path.append('.')
+    from seed_data import get_default_drivers, get_default_warehouses, get_default_admin, get_default_test_user
     
     # Insert drivers
     drivers = get_default_drivers()
@@ -67,6 +69,11 @@ async def seed_default_data():
     admin = get_default_admin()
     await admins_collection.insert_one(admin)
     print("✅ Inserted default admin")
+    
+    # Insert default test user
+    test_user = get_default_test_user()
+    await users_collection.insert_one(test_user)
+    print("✅ Inserted default test user")
     
     print("✅ Database seeding complete")
 

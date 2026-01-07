@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Package, Plus, Search, Activity, LogOut, Truck, Menu, X } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import NotificationCenter from './NotificationCenter'
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -76,6 +77,7 @@ export default function Navbar() {
           </div>
 
           <div className="hidden md:flex items-center gap-4">
+            {!isDriver && user && <NotificationCenter userId={user.id} />}
             <div className="text-right">
               <div className="font-semibold text-sm">{isDriver ? driver?.name : user?.full_name}</div>
               <div className="text-xs text-gray-500 capitalize">{isDriver ? 'Driver' : user?.role}</div>

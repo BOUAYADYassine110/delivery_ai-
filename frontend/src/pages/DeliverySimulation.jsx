@@ -15,6 +15,7 @@ export default function DeliverySimulation() {
   const [weather, setWeather] = useState(null)
   const [traffic, setTraffic] = useState('moderate')
   const [route, setRoute] = useState([])
+  const [routeMetrics, setRouteMetrics] = useState({ distance: 0, duration: 0 })
   const [events, setEvents] = useState([])
 
   useEffect(() => {
@@ -85,7 +86,40 @@ export default function DeliverySimulation() {
   }
 
   const startSimulation = async () => {
-    if (!order || !driver || !map) return
+    if (!order || !map) return
+
+    // If no driver assigned, assign one first
+    if (!order.assigned_driver || !driver) {
+      setSimulationStatus('assigning')
+      addEvent('Assigning driver to order...', 'info')
+      
+      try {
+        const auth = JSON.parse(localStorage.getItem('auth') || '{}')
+        const response = await fetch(`http://localhost:8001/api/orders/${orderId}/assign-driver`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${auth.access_token}` }
+        })
+        
+        const data = await response.json()
+        
+        if (data.error) {
+          addEvent(`Error: ${data.error}`, 'warning')
+          setSimulationStatus('initializing')
+          return
+        }
+        
+        addEvent(`Driver ${data.driver} assigned!`, 'success')
+        
+        // Refresh order data
+        await fetchOrderData()
+        await sleep(1000)
+      } catch (error) {
+        console.error('Error assigning driver:', error)
+        addEvent('Failed to assign driver', 'warning')
+        setSimulationStatus('initializing')
+        return
+      }
+    }
 
     setSimulationStatus('running')
     addEvent('Simulation started', 'info')
@@ -143,12 +177,17 @@ export default function DeliverySimulation() {
       [deliveryCoords.lat, deliveryCoords.lng]
     ])
 
+    let totalDistance = 0
+    let totalDuration = 0
+
     // Phase 1: Warehouse to Pickup (use OSRM)
     addEvent(`Driver leaving ${order.pickup_city} warehouse`, 'info')
     await updateOrderStatus('en_route_to_pickup')
     const toPickupRoute = await fetchRouteOSRM(originWarehouse, pickupCoords)
-    drawSingleRoute(toPickupRoute, map, 'blue')
-    await animateAlongRoute(dMarker, toPickupRoute)
+    drawSingleRoute(toPickupRoute.coordinates, map, 'blue')
+    await animateAlongRoute(dMarker, toPickupRoute.coordinates)
+    totalDistance += parseFloat(toPickupRoute.distance) || 0
+    totalDuration += toPickupRoute.duration || 0
 
     // Phase 2: At Pickup
     addEvent('Driver arrived at pickup location', 'success')
@@ -162,8 +201,10 @@ export default function DeliverySimulation() {
     addEvent(`Returning to ${order.pickup_city} warehouse`, 'info')
     await updateOrderStatus('returning_to_warehouse')
     const backToWarehouseRoute = await fetchRouteOSRM(pickupCoords, originWarehouse)
-    drawSingleRoute(backToWarehouseRoute, map, 'orange')
-    await animateAlongRoute(dMarker, backToWarehouseRoute)
+    drawSingleRoute(backToWarehouseRoute.coordinates, map, 'orange')
+    await animateAlongRoute(dMarker, backToWarehouseRoute.coordinates)
+    totalDistance += parseFloat(backToWarehouseRoute.distance) || 0
+    totalDuration += backToWarehouseRoute.duration || 0
 
     // Phase 4: At Origin Warehouse
     addEvent(`Package at ${order.pickup_city} warehouse`, 'success')
@@ -183,8 +224,10 @@ export default function DeliverySimulation() {
     addEvent(`Truck departing to ${order.delivery_city}`, 'info')
     await updateOrderStatus('in_transit_inter_city')
     const interCityRoute = await fetchRouteOSRM(originWarehouse, destWarehouse)
-    drawSingleRoute(interCityRoute, map, 'red')
-    await animateAlongRoute(truckMarker, interCityRoute)
+    drawSingleRoute(interCityRoute.coordinates, map, 'red')
+    await animateAlongRoute(truckMarker, interCityRoute.coordinates)
+    totalDistance += parseFloat(interCityRoute.distance) || 0
+    totalDuration += interCityRoute.duration || 0
 
     // Phase 6: At Destination Warehouse
     addEvent(`Package arrived at ${order.delivery_city} warehouse`, 'success')
@@ -197,6 +240,7 @@ export default function DeliverySimulation() {
       addEvent('Package ready for customer pickup at warehouse', 'success')
       await updateOrderStatus('delivered')
       setSimulationStatus('completed')
+      setRouteMetrics({ distance: totalDistance, duration: totalDuration })
     } else {
       // Phase 7: Final delivery to door (use OSRM)
       addEvent('Assigning final delivery driver', 'info')
@@ -209,12 +253,15 @@ export default function DeliverySimulation() {
       addEvent('Driver heading to delivery address', 'info')
       await updateOrderStatus('out_for_delivery')
       const finalRoute = await fetchRouteOSRM(destWarehouse, deliveryCoords)
-      drawSingleRoute(finalRoute, map, 'green')
-      await animateAlongRoute(finalDriver, finalRoute)
+      drawSingleRoute(finalRoute.coordinates, map, 'green')
+      await animateAlongRoute(finalDriver, finalRoute.coordinates)
+      totalDistance += parseFloat(finalRoute.distance) || 0
+      totalDuration += finalRoute.duration || 0
 
       addEvent('Package delivered to customer door!', 'success')
       await updateOrderStatus('delivered')
       setSimulationStatus('completed')
+      setRouteMetrics({ distance: totalDistance, duration: totalDuration })
     }
     
     setTimeout(() => fetchOrderData(), 1000)
@@ -241,10 +288,21 @@ export default function DeliverySimulation() {
       [deliveryCoords.lat, deliveryCoords.lng]
     ])
 
-    const routeData = await fetchRoute(driverStart, pickupCoords, deliveryCoords)
-    setRoute(routeData)
-    drawRoute(routeData, map)
-    await animateDelivery(dMarker, routeData, pickupCoords, deliveryCoords)
+    // Get separate routes for each segment
+    const toPickupRoute = await fetchRouteOSRM(driverStart, pickupCoords)
+    const toDeliveryRoute = await fetchRouteOSRM(pickupCoords, deliveryCoords)
+    
+    // Draw both routes
+    drawSingleRoute(toPickupRoute.coordinates, map, 'blue')
+    drawSingleRoute(toDeliveryRoute.coordinates, map, 'green')
+    
+    // Store combined metrics
+    const totalDistance = (parseFloat(toPickupRoute.distance) || 0) + (parseFloat(toDeliveryRoute.distance) || 0)
+    const totalDuration = (toPickupRoute.duration || 0) + (toDeliveryRoute.duration || 0)
+    setRouteMetrics({ distance: totalDistance, duration: totalDuration })
+    setRoute([...toPickupRoute.coordinates, ...toDeliveryRoute.coordinates])
+    
+    await animateIntraCityDelivery(dMarker, toPickupRoute.coordinates, toDeliveryRoute.coordinates)
   }
 
   const animateAlongRoute = async (marker, route) => {
@@ -281,8 +339,16 @@ export default function DeliverySimulation() {
       if (response.ok) {
         const data = await response.json()
         if (data.routes && data.routes[0]) {
-          const coords = data.routes[0].geometry.coordinates
-          return coords.map(c => ({ lat: c[1], lng: c[0] }))
+          const route = data.routes[0]
+          const coords = route.geometry.coordinates
+          const distance = (route.distance / 1000).toFixed(1) // km
+          const duration = Math.round(route.duration / 60) // minutes
+          
+          return {
+            coordinates: coords.map(c => ({ lat: c[1], lng: c[0] })),
+            distance,
+            duration
+          }
         }
       }
     } catch (error) {
@@ -290,7 +356,12 @@ export default function DeliverySimulation() {
     }
     
     // Fallback to simple route
-    return generateSimpleRoute(start, end, end).slice(0, 15)
+    const simpleRoute = generateSimpleRoute(start, end, end).slice(0, 15)
+    return {
+      coordinates: simpleRoute,
+      distance: 0,
+      duration: 0
+    }
   }
 
   const drawSingleRoute = (route, mapInstance, color) => {
@@ -320,15 +391,21 @@ export default function DeliverySimulation() {
       
       if (!response.ok) {
         console.error('Routing API failed, using fallback')
-        return generateSimpleRoute(start, pickup, delivery)
+        return { route: generateSimpleRoute(start, pickup, delivery), distance: 0, duration: 0 }
       }
       
       const data = await response.json()
       console.log('Route data received:', data)
-      return data.route || generateSimpleRoute(start, pickup, delivery)
+      
+      // Store metrics
+      if (data.distance && data.duration) {
+        setRouteMetrics({ distance: data.distance, duration: data.duration })
+      }
+      
+      return { route: data.route || generateSimpleRoute(start, pickup, delivery), distance: data.distance || 0, duration: data.duration || 0 }
     } catch (error) {
       console.error('Routing error:', error)
-      return generateSimpleRoute(start, pickup, delivery)
+      return { route: generateSimpleRoute(start, pickup, delivery), distance: 0, duration: 0 }
     }
   }
 
@@ -373,10 +450,7 @@ export default function DeliverySimulation() {
     }
   }
 
-  const animateDelivery = async (marker, routeData, pickup, delivery) => {
-    const toPickupRoute = routeData.filter(p => p.type === 'to_pickup')
-    const toDeliveryRoute = routeData.filter(p => p.type === 'to_delivery')
-
+  const animateIntraCityDelivery = async (marker, toPickupRoute, toDeliveryRoute) => {
     // Phase 1: Moving to pickup
     addEvent('Driver heading to pickup location', 'info')
     await updateOrderStatus('in_transit')
@@ -385,7 +459,7 @@ export default function DeliverySimulation() {
       const point = toPickupRoute[i]
       marker.setLatLng([point.lat, point.lng])
       setCurrentStep(i)
-      await sleep(300)
+      await sleep(200)
     }
 
     // Phase 2: At pickup
@@ -403,7 +477,7 @@ export default function DeliverySimulation() {
       const point = toDeliveryRoute[i]
       marker.setLatLng([point.lat, point.lng])
       setCurrentStep(toPickupRoute.length + i)
-      await sleep(300)
+      await sleep(200)
     }
 
     // Phase 4: Delivered
@@ -411,7 +485,6 @@ export default function DeliverySimulation() {
     await updateOrderStatus('delivered')
     setSimulationStatus('completed')
     
-    // Refresh order data
     setTimeout(() => fetchOrderData(), 1000)
   }
 
@@ -437,11 +510,33 @@ export default function DeliverySimulation() {
 
 
   const createCustomIcon = (emoji, color) => {
+    const colors = {
+      blue: '#3B82F6',
+      green: '#10B981',
+      orange: '#F59E0B',
+      purple: '#8B5CF6',
+      red: '#EF4444'
+    }
+    
     return window.L.divIcon({
-      html: `<div style="font-size: 24px; text-align: center;">${emoji}</div>`,
-      className: 'custom-marker',
-      iconSize: [30, 30],
-      iconAnchor: [15, 15]
+      html: `<div style="
+        background: ${colors[color] || color};
+        width: 32px;
+        height: 32px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        border: 3px solid white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <span style="transform: rotate(45deg); font-size: 18px;">${emoji}</span>
+      </div>`,
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32]
     })
   }
 
@@ -616,11 +711,15 @@ export default function DeliverySimulation() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Distance:</span>
-                <span className="font-medium">{(route.length * 0.5).toFixed(1)} km</span>
+                <span className="font-medium">
+                  {routeMetrics.distance > 0 ? `${routeMetrics.distance} km` : 'Calculating...'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Estimated Time:</span>
-                <span className="font-medium">{Math.ceil(route.length * 0.3)} min</span>
+                <span className="font-medium">
+                  {routeMetrics.duration > 0 ? `${routeMetrics.duration} min` : 'Calculating...'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Service Type:</span>

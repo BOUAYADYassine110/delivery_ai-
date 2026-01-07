@@ -16,6 +16,13 @@ from auth import (
 # Load environment variables
 load_dotenv()
 
+# Import storage layer (switches between in-memory and MongoDB)
+from storage import storage, USE_MONGODB
+
+# Import clean function if using MongoDB
+if USE_MONGODB:
+    from storage import clean_mongo_doc
+
 from api.routes.gps_routes import router as gps_router
 from api.routes.driver_management import router as driver_router
 from api.services.smart_assignment import SmartAssignmentService
@@ -284,24 +291,48 @@ def root():
 def test():
     return {"message": "API is working!", "status": "success"}
 
-# In-memory user storage with hashed passwords
-users_db = [
-    {
-        "id": "USER001",
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "$2b$12$PKSDwLIlkz8idpVlTrwaqO4pI95DkOCNsTrBgc9g.BVO4NU1WWUQO",
-        "role": "client",
-        "full_name": "Test User",
-        "phone": "+212661234567",
-        "address": "Casablanca, Morocco",
-        "created_at": datetime.now().isoformat()
-    }
-]
+# Initialize storage (MongoDB or in-memory based on USE_MONGODB env var)
+if USE_MONGODB:
+    print("="*60)
+    print("🗄️  MONGODB ENABLED - Data will persist between restarts")
+    print("="*60)
+else:
+    print("="*60)
+    print("💾 IN-MEMORY MODE - Data will be lost on restart")
+    print("💡 Set USE_MONGODB=true in .env to enable persistence")
+    print("="*60)
+
+# Get data from storage
+users_db = storage.get_users()
+orders_db = storage.get_orders()
+drivers_db = storage.get_drivers()
+warehouses_db = storage.get_warehouses()
+notifications_db = storage.get_notifications()
+
+# Helper function to refresh data from storage
+def refresh_data():
+    global orders_db, drivers_db, warehouses_db, notifications_db
+    orders_db = storage.get_orders()
+    drivers_db = storage.get_drivers()
+    warehouses_db = storage.get_warehouses()
+    notifications_db = storage.get_notifications()
+
+# Initialize with default data if empty (in-memory mode only)
+if not USE_MONGODB and len(users_db) == 0:
+    from seed_data import get_default_test_user, get_default_drivers, get_default_warehouses
+    storage.add_user(get_default_test_user())
+    for driver in get_default_drivers():
+        storage.drivers.append(driver)
+    for warehouse in get_default_warehouses():
+        storage.warehouses.append(warehouse)
+    users_db = storage.get_users()
+    drivers_db = storage.get_drivers()
+    warehouses_db = storage.get_warehouses()
 
 @app.post("/api/auth/register")
 def register(request: RegisterRequest):
     # Check if username or email already exists
+    users_db = storage.get_users()
     if any(u["username"] == request.username for u in users_db):
         raise HTTPException(status_code=400, detail="Username already exists")
     if any(u["email"] == request.email for u in users_db):
@@ -320,7 +351,7 @@ def register(request: RegisterRequest):
         "address": request.address,
         "created_at": datetime.now().isoformat()
     }
-    users_db.append(new_user)
+    storage.add_user(new_user)
     
     # Create access token
     access_token = create_access_token(
@@ -342,6 +373,7 @@ def register(request: RegisterRequest):
 @app.post("/api/auth/login")
 def login(request: LoginRequest):
     # Find user by username
+    users_db = storage.get_users()
     user = next((u for u in users_db if u["username"] == request.username), None)
     
     if not user or not verify_password(request.password, user["password"]):
@@ -1025,9 +1057,12 @@ def get_user_orders(current_user: dict = Depends(get_current_client)):
     """Get orders for current authenticated user only"""
     user_id = current_user["id"]
     
+    # Fetch fresh data from storage (MongoDB or in-memory)
+    all_orders = storage.get_orders()
+    
     # Filter orders by user_id
     user_orders = []
-    for order in orders_db:
+    for order in all_orders:
         if order.get("user_id") == user_id:
             user_orders.append({
                 "id": order["id"],
@@ -1144,8 +1179,12 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     }
     
     orders_db.append(new_order)
+    storage.add_order(new_order)  # Save to storage (MongoDB or in-memory)
     
     print(f"\n🤖 AI AGENT PROCESSING:")
+    
+    # Refresh drivers from storage to get latest data
+    refresh_data()
     
     # Get available drivers in the pickup city
     city_drivers = [d for d in drivers_db if 
@@ -1190,7 +1229,22 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
                 new_order["status"] = "assigned"  # Auto-accept for intra-city
                 best_driver["current_orders"].append(order_id)
                 best_driver["status"] = "busy"
-                print(f"   ⚡ Status: AUTO-ACCEPTED")
+                
+                # Save changes to storage IMMEDIATELY
+                storage.update_order(order_id, new_order)
+                storage.update_driver(best_driver["id"], best_driver)
+                
+                # Also update in-memory lists
+                for i, o in enumerate(orders_db):
+                    if o["id"] == order_id:
+                        orders_db[i] = new_order
+                        break
+                for i, d in enumerate(drivers_db):
+                    if d["id"] == best_driver["id"]:
+                        drivers_db[i] = best_driver
+                        break
+                
+                print(f"   ⚡ Status: AUTO-ACCEPTED & SAVED")
             else:
                 print(f"   ❌ No suitable driver found")
         else:
@@ -1221,7 +1275,17 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
             new_order["assigned_driver"] = best_driver["id"]
             new_order["status"] = "pending_acceptance"
             new_order["assignment_attempts"] = 1
-            print(f"   ⏳ Status: PENDING DRIVER ACCEPTANCE")
+            
+            # Save to storage IMMEDIATELY
+            storage.update_order(order_id, new_order)
+            
+            # Update in-memory list
+            for i, o in enumerate(orders_db):
+                if o["id"] == order_id:
+                    orders_db[i] = new_order
+                    break
+            
+            print(f"   ⏳ Status: PENDING DRIVER ACCEPTANCE & SAVED")
         else:
             print(f"   ❌ No suitable driver found")
     
@@ -1234,6 +1298,9 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
         simulator.start_simulation(order_id, new_order, orders_db)
         print(f"🎬 Delivery simulation started for order {order_id}")
     
+    # Clean MongoDB ObjectId before returning
+    if USE_MONGODB:
+        return clean_mongo_doc(new_order)
     return new_order
 
 # Driver assignment response with auto-reassignment
@@ -1361,9 +1428,12 @@ def complete_delivery_final(completion_data: dict):
 
 @app.get("/api/admin/orders")
 def get_all_orders(current_admin: dict = Depends(get_current_admin)):
+    # Fetch fresh data from storage
+    all_orders = storage.get_orders()
+    
     # Add customer information to orders
     enriched_orders = []
-    for order in orders_db:
+    for order in all_orders:
         enriched_order = order.copy()
         # Add customer info if available
         if not enriched_order.get('sender_name'):
@@ -1741,6 +1811,53 @@ def test_driver_login():
         "password": "driver123 or 123",
         "total_drivers": len(drivers_db)
     }
+@app.post("/api/orders/{order_id}/assign-driver")
+async def assign_driver_to_order(order_id: str):
+    """Manually assign driver to an existing order"""
+    refresh_data()
+    
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    if not order:
+        return {"error": "Order not found"}
+    
+    if order.get("assigned_driver"):
+        # Driver already assigned, just start simulation
+        simulator.start_simulation(order_id, order, orders_db)
+        return {"message": "Simulation started", "order": clean_mongo_doc(order) if USE_MONGODB else order}
+    
+    # Get available drivers in the pickup city
+    city_drivers = [d for d in drivers_db if 
+                   d.get("status") in ["available", "online"] and 
+                   d.get("assigned_city", "").lower() == order["pickup_city"].lower()]
+    
+    if not city_drivers:
+        return {"error": f"No available drivers in {order['pickup_city']}"}
+    
+    # Use smart assignment
+    assignment_service = SmartAssignmentService()
+    best_driver = await assignment_service.find_best_driver(order, city_drivers)
+    
+    if best_driver:
+        order["assigned_driver"] = best_driver["id"]
+        order["status"] = "assigned"
+        best_driver["current_orders"].append(order_id)
+        best_driver["status"] = "busy"
+        
+        # Save changes
+        storage.update_order(order_id, order)
+        storage.update_driver(best_driver["id"], best_driver)
+        
+        # Start simulation
+        simulator.start_simulation(order_id, order, orders_db)
+        
+        return {
+            "message": "Driver assigned and simulation started",
+            "order": clean_mongo_doc(order) if USE_MONGODB else order,
+            "driver": best_driver["name"]
+        }
+    
+    return {"error": "No suitable driver found"}
+
 @app.get("/api/assignment/simulate")
 def simulate_assignment(pickup_city: str, weight: float = 2.0, service_type: str = "standard", fragile: bool = False):
     """Simulate driver assignment to show selection logic"""
@@ -1883,6 +2000,7 @@ def update_order_location(order_id: str, location: LocationUpdate):
 
 @app.post("/api/orders/{order_id}/status")
 def update_delivery_status(order_id: str, update: DeliveryUpdate):
+    refresh_data()  # Get fresh data
     order = next((o for o in orders_db if o["id"] == order_id), None)
     if not order:
         return {"error": "Order not found"}
@@ -1892,29 +2010,47 @@ def update_delivery_status(order_id: str, update: DeliveryUpdate):
     order["proof_photo"] = update.proof_photo
     order["last_updated"] = datetime.now().isoformat()
     
+    # Save to storage
+    storage.update_order(order_id, order)
+    
     # If delivered, free up driver
     if update.status == "delivered" and order["assigned_driver"]:
         driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
         if driver and order_id in driver["current_orders"]:
             driver["current_orders"].remove(order_id)
             driver["total_deliveries"] += 1
+            storage.update_driver(driver["id"], driver)
     
     return {"message": "Status updated", "order": order}
 
 @app.get("/api/orders/{order_id}/track")
 def track_order(order_id: str):
     try:
-        order = next((o for o in orders_db if o["id"] == order_id), None)
+        # Fetch fresh data from storage
+        all_orders = storage.get_orders()
+        order = next((o for o in all_orders if o["id"] == order_id), None)
         if not order:
             return {"error": "Order not found"}
         
         driver_info = None
         if order.get("assigned_driver"):
+            refresh_data()
             driver_info = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
         
-        # Get coordinates - use stored coordinates if available
-        pickup_coords = order.get("pickup_coordinates") or get_city_coordinates(order["pickup_city"])
-        delivery_coords = order.get("delivery_coordinates") or get_city_coordinates(order["delivery_city"])
+        # Get coordinates - use stored coordinates OR generate from address
+        pickup_coords = order.get("pickup_coordinates")
+        if not pickup_coords:
+            pickup_coords = generate_address_coordinates(order["pickup_city"], order["pickup_address"])
+            # Save coordinates to order
+            order["pickup_coordinates"] = pickup_coords
+            storage.update_order(order_id, order)
+        
+        delivery_coords = order.get("delivery_coordinates")
+        if not delivery_coords:
+            delivery_coords = generate_address_coordinates(order["delivery_city"], order["delivery_address"])
+            # Save coordinates to order
+            order["delivery_coordinates"] = delivery_coords
+            storage.update_order(order_id, order)
         
         # Get current package location
         current_package_location = get_current_package_location(order, pickup_coords, delivery_coords)
@@ -2026,9 +2162,46 @@ def get_warehouses():
 
 @app.get("/api/weather/{city}")
 def get_weather(city: str):
-    """Simulate weather data for cities"""
+    """Get real weather data from OpenWeatherMap API"""
+    import requests
+    import os
+    
+    api_key = os.getenv('OWM_API_KEY', '4328f889fe045836d165ee930c7277ef')
+    
+    # City coordinates for Moroccan cities
+    city_coords = {
+        "casablanca": {"lat": 33.5731, "lon": -7.5898},
+        "rabat": {"lat": 34.0209, "lon": -6.8416},
+        "marrakech": {"lat": 31.6295, "lon": -7.9811},
+        "el jadida": {"lat": 33.2316, "lon": -8.5007},
+        "salé": {"lat": 34.0531, "lon": -6.7985},
+        "agadir": {"lat": 30.4278, "lon": -9.5981}
+    }
+    
+    coords = city_coords.get(city.lower(), city_coords["casablanca"])
+    
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={coords['lat']}&lon={coords['lon']}&appid={api_key}&units=metric"
+        response = requests.get(url, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "city": city,
+                "temperature": round(data['main']['temp']),
+                "condition": data['weather'][0]['main'],
+                "description": data['weather'][0]['description'],
+                "humidity": data['main']['humidity'],
+                "wind_speed": round(data['wind']['speed'] * 3.6),  # Convert m/s to km/h
+                "visibility": "Good" if data.get('visibility', 10000) > 5000 else "Moderate" if data.get('visibility', 10000) > 2000 else "Poor",
+                "impact_on_delivery": "None" if data['weather'][0]['main'] in ['Clear', 'Clouds'] else "Minimal" if data['weather'][0]['main'] == 'Drizzle' else "Moderate"
+            }
+    except Exception as e:
+        print(f"Weather API error: {e}")
+    
+    # Fallback to simulated data
     import random
-    weather_data = {
+    return {
         "city": city,
         "temperature": random.randint(15, 35),
         "condition": random.choice(["Sunny", "Cloudy", "Light Rain", "Clear", "Partly Cloudy"]),
@@ -2037,7 +2210,6 @@ def get_weather(city: str):
         "visibility": random.choice(["Good", "Moderate", "Poor"]),
         "impact_on_delivery": random.choice(["None", "Minimal", "Moderate"])
     }
-    return weather_data
 
 @app.post("/api/routing/optimize")
 async def optimize_route(route_request: dict):
@@ -2276,6 +2448,7 @@ async def create_inter_city_order(order: InterCityOrderCreate, current_user: dic
     }
     
     orders_db.append(new_order)
+    storage.add_order(new_order)  # Save to storage (MongoDB or in-memory)
     
     # Assign pickup driver if door pickup
     if order.pickup_option == "door_pickup":
@@ -2291,6 +2464,9 @@ async def create_inter_city_order(order: InterCityOrderCreate, current_user: dic
                 new_order["status"] = "pending_acceptance"
                 new_order["assignment_attempts"] = 1
     
+    # Clean MongoDB ObjectId before returning
+    if USE_MONGODB:
+        return clean_mongo_doc(new_order)
     return new_order
 
 def get_next_transport_schedule(pickup_city: str, delivery_city: str) -> dict:
@@ -2419,9 +2595,18 @@ def get_user_notifications(user_id: str):
     user_notifications = [n for n in notifications_db if n.get("user_id") == user_id]
     return {"notifications": user_notifications, "unread_count": len([n for n in user_notifications if not n["read"]])}
 
+@app.post("/api/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: str):
+    notification = next((n for n in notifications_db if n["id"] == notification_id), None)
+    if notification:
+        notification["read"] = True
+        return {"message": "Notification marked as read", "notification": notification}
+    return {"error": "Notification not found"}
+
 # Enhanced GPS tracking and assignment
 @app.post("/api/driver/{driver_id}/location")
 def update_driver_location(driver_id: str, location: DriverLocationUpdate):
+    refresh_data()  # Get fresh data
     driver = next((d for d in drivers_db if d["id"] == driver_id), None)
     if not driver:
         return {"error": "Driver not found"}
@@ -2435,6 +2620,9 @@ def update_driver_location(driver_id: str, location: DriverLocationUpdate):
         "heading": location.heading,
         "last_update": datetime.now().isoformat()
     })
+    
+    # Save to storage
+    storage.update_driver(driver_id, driver)
     
     # Update all assigned orders with driver's location
     for order_id in driver["current_orders"]:
@@ -2455,6 +2643,9 @@ def update_driver_location(driver_id: str, location: DriverLocationUpdate):
                 "timestamp": datetime.now().isoformat(),
                 "speed": location.speed
             })
+            
+            # Save order to storage
+            storage.update_order(order_id, order)
     
     # Check for automatic delivery detection
     auto_deliveries = check_automatic_delivery_detection(driver_id, location)
