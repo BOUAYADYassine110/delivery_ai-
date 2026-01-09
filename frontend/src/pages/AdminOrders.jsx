@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AdminNavbar from '../components/AdminNavbar'
-import { Search, RefreshCw } from 'lucide-react'
+import OrderDetailsModal from '../components/OrderDetailsModal'
+import { Search, RefreshCw, Eye, Play } from 'lucide-react'
 
 export default function AdminOrders() {
+  const navigate = useNavigate()
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedOrder, setSelectedOrder] = useState(null)
 
   useEffect(() => {
     fetchOrders()
@@ -14,14 +18,24 @@ export default function AdminOrders() {
 
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('adminToken')
-      const response = await fetch('http://localhost:8001/api/orders', {
+      const auth = JSON.parse(localStorage.getItem('auth') || '{}')
+      const token = auth.access_token || localStorage.getItem('adminToken')
+      
+      const response = await fetch('http://localhost:8001/api/admin/orders', {
         headers: { 'Authorization': `Bearer ${token}` }
       })
+      
+      if (!response.ok) {
+        console.error('Failed to fetch orders')
+        setOrders([])
+        return
+      }
+      
       const data = await response.json()
-      setOrders(data)
+      setOrders(data.orders || data || [])
     } catch (error) {
       console.error('Error:', error)
+      setOrders([])
     } finally {
       setLoading(false)
     }
@@ -83,32 +97,64 @@ export default function AdminOrders() {
         </div>
 
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tracking #</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Route</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredOrders.map(order => (
-                <tr key={order.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{order.tracking_number}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{order.pickup_city} → {order.delivery_city}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[order.status]}`}>
-                      {order.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-semibold text-gray-900">{order.price} MAD</td>
+          {filteredOrders.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              No orders found
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tracking #</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Route</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredOrders.map(order => (
+                  <tr key={order.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{order.tracking_number || order.id}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700">{order.pickup_city} → {order.delivery_city}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {order.status?.replace(/_/g, ' ') || 'pending'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{order.price || order.total_cost || 0} MAD</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setSelectedOrder(order)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/simulation/${order.id}`)}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                          title="Simulate Delivery"
+                        >
+                          <Play className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
+
+      {selectedOrder && (
+        <OrderDetailsModal
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+        />
+      )}
     </div>
   )
 }

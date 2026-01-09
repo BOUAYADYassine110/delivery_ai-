@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { MapPin, Package, Truck, Clock, Navigation, Cloud, AlertTriangle, CheckCircle } from 'lucide-react'
+import { MapPin, Package, Truck, Clock, Navigation, Cloud, AlertTriangle, CheckCircle, ArrowLeft, Play, Pause, RotateCcw, Zap, TrendingUp } from 'lucide-react'
 
 export default function DeliverySimulation() {
   const { orderId } = useParams()
@@ -572,90 +572,121 @@ export default function DeliverySimulation() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">🎬 Delivery Simulation</h1>
-            <p className="text-sm opacity-90">Order: {order.tracking_number}</p>
+    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Modern Header */}
+      <div className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate(-1)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <Package className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">Live Delivery Simulation</h1>
+                  <p className="text-sm text-gray-500">Tracking: {order.tracking_number}</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {simulationStatus === 'initializing' && (
+                <button
+                  onClick={startSimulation}
+                  className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2"
+                >
+                  <Play className="w-4 h-4" />
+                  Start Simulation
+                </button>
+              )}
+              {simulationStatus === 'running' && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl border border-blue-200">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-medium text-blue-700">Simulation Running</span>
+                </div>
+              )}
+              {simulationStatus === 'completed' && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-xl border border-green-200">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">Completed</span>
+                </div>
+              )}
+            </div>
           </div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-gray-100"
-          >
-            Back to Dashboard
-          </button>
         </div>
       </div>
 
-      <div className="flex-1 flex">
-        {/* Map */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Map Container */}
         <div className="flex-1 relative">
           <div ref={mapRef} className="w-full h-full" />
           
-          {/* Simulation Controls */}
-          <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 z-[1000]">
-            <div className="flex items-center gap-3 mb-3">
-              <Package className="w-6 h-6 text-blue-600" />
-              <div>
-                <div className="font-semibold">{order.package_description}</div>
-                <div className="text-sm text-gray-600">{order.weight}kg</div>
-              </div>
-            </div>
-            
-            {simulationStatus === 'initializing' && (
-              <button
-                onClick={startSimulation}
-                className="w-full px-4 py-2 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-lg hover:from-green-600 hover:to-blue-600 font-semibold"
-              >
-                ▶️ Start Simulation
-              </button>
-            )}
-            
-            {simulationStatus === 'running' && (
-              <div className="text-center">
-                <div className="animate-pulse text-blue-600 font-semibold">🚚 Simulation Running...</div>
-                <div className="text-xs text-gray-600 mt-1">Step {currentStep}/{route.length}</div>
-              </div>
-            )}
-            
-            {simulationStatus === 'completed' && (
-              <div className="text-center text-green-600 font-semibold">
-                ✅ Delivery Completed!
-              </div>
-            )}
-          </div>
-
-          {/* Weather & Traffic */}
-          <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 z-[1000] space-y-3">
-            {weather && (
-              <div className="flex items-center gap-2">
-                <Cloud className="w-5 h-5 text-blue-500" />
-                <div>
-                  <div className="text-sm font-semibold">{weather.condition}</div>
-                  <div className="text-xs text-gray-600">{weather.temperature}°C</div>
+          {/* Floating Info Cards */}
+          <div className="absolute top-6 left-6 right-6 flex justify-between items-start z-[1000] pointer-events-none">
+            {/* Package Info Card */}
+            <div className="bg-white rounded-2xl shadow-xl p-4 max-w-xs pointer-events-auto">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                  <Package className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900">{order.package_description}</div>
+                  <div className="text-sm text-gray-500">{order.weight}kg • {order.service_type}</div>
                 </div>
               </div>
-            )}
-            
-            <div className="flex items-center gap-2">
-              <AlertTriangle className={`w-5 h-5 ${traffic === 'heavy' ? 'text-red-500' : traffic === 'moderate' ? 'text-yellow-500' : 'text-green-500'}`} />
-              <div>
-                <div className="text-sm font-semibold capitalize">{traffic} Traffic</div>
-                <div className="text-xs text-gray-600">Current conditions</div>
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <span className="text-xs text-gray-500">Route</span>
+                <span className="text-sm font-medium text-gray-900">{order.pickup_city} → {order.delivery_city}</span>
+              </div>
+            </div>
+
+            {/* Weather & Traffic Card */}
+            <div className="bg-white rounded-2xl shadow-xl p-4 space-y-3 pointer-events-auto">
+              {weather && (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                    <Cloud className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">{weather.condition}</div>
+                    <div className="text-xs text-gray-500">{weather.temperature}°C</div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  traffic === 'heavy' ? 'bg-red-50' : traffic === 'moderate' ? 'bg-yellow-50' : 'bg-green-50'
+                }`}>
+                  <AlertTriangle className={`w-5 h-5 ${
+                    traffic === 'heavy' ? 'text-red-500' : traffic === 'moderate' ? 'text-yellow-500' : 'text-green-500'
+                  }`} />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-900 capitalize">{traffic} Traffic</div>
+                  <div className="text-xs text-gray-500">Current conditions</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="w-96 bg-gray-50 border-l overflow-y-auto">
-          {/* Status */}
-          <div className="p-4 bg-white border-b">
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`w-3 h-3 rounded-full bg-${getStatusColor(order.status)}-500 animate-pulse`} />
-              <span className="font-semibold capitalize">{order.status.replace(/_/g, ' ')}</span>
+        {/* Modern Sidebar */}
+        <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
+          {/* Status Header */}
+          <div className="p-6 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-white">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-3 h-3 rounded-full animate-pulse ${
+                order.status === 'delivered' ? 'bg-green-500' :
+                order.status === 'in_transit' ? 'bg-blue-500' :
+                order.status === 'picked_up' ? 'bg-purple-500' :
+                'bg-yellow-500'
+              }`} />
+              <span className="font-semibold text-gray-900 capitalize">{order.status.replace(/_/g, ' ')}</span>
             </div>
             <div className="text-sm text-gray-600">
               {order.pickup_city} → {order.delivery_city}
@@ -664,67 +695,94 @@ export default function DeliverySimulation() {
 
           {/* Driver Info */}
           {driver && (
-            <div className="p-4 bg-white border-b">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-2xl">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg">
                   {getVehicleIcon(driver.vehicle_type)}
                 </div>
-                <div>
-                  <div className="font-semibold">{driver.name}</div>
-                  <div className="text-sm text-gray-600 capitalize">{driver.vehicle_type}</div>
-                  <div className="text-xs text-yellow-600">⭐ {driver.rating}/5.0</div>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900">{driver.name}</div>
+                  <div className="text-sm text-gray-500 capitalize">{driver.vehicle_type}</div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-yellow-500">⭐</span>
+                    <span className="text-sm font-medium text-gray-700">{driver.rating}/5.0</span>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Events Timeline */}
-          <div className="p-4">
-            <h3 className="font-semibold mb-3 flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Live Events
+          {/* Route Metrics */}
+          <div className="p-6 border-b border-gray-200 bg-gradient-to-br from-blue-50 to-indigo-50">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-blue-600" />
+              Route Metrics
             </h3>
-            <div className="space-y-2">
-              {events.map((event, idx) => (
-                <div key={idx} className={`p-3 rounded-lg ${
-                  event.type === 'success' ? 'bg-green-50 border border-green-200' :
-                  event.type === 'warning' ? 'bg-yellow-50 border border-yellow-200' :
-                  'bg-blue-50 border border-blue-200'
-                }`}>
-                  <div className="flex items-start gap-2">
-                    {event.type === 'success' ? <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" /> :
-                     event.type === 'warning' ? <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5" /> :
-                     <Navigation className="w-4 h-4 text-blue-600 mt-0.5" />}
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{event.message}</div>
-                      <div className="text-xs text-gray-500">{event.timestamp}</div>
-                    </div>
-                  </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl p-3 shadow-sm">
+                <div className="text-xs text-gray-500 mb-1">Distance</div>
+                <div className="text-lg font-bold text-gray-900">
+                  {routeMetrics.distance > 0 ? `${routeMetrics.distance} km` : '--'}
                 </div>
-              ))}
+              </div>
+              <div className="bg-white rounded-xl p-3 shadow-sm">
+                <div className="text-xs text-gray-500 mb-1">Duration</div>
+                <div className="text-lg font-bold text-gray-900">
+                  {routeMetrics.duration > 0 ? `${routeMetrics.duration} min` : '--'}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl p-3 shadow-sm">
+                <div className="text-xs text-gray-500 mb-1">Service</div>
+                <div className="text-sm font-semibold text-gray-900 capitalize flex items-center gap-1">
+                  {order.service_type === 'express' && <Zap className="w-3 h-3 text-yellow-500" />}
+                  {order.service_type}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl p-3 shadow-sm">
+                <div className="text-xs text-gray-500 mb-1">Type</div>
+                <div className="text-sm font-semibold text-gray-900">
+                  {order.is_inter_city ? 'Inter-City' : 'Intra-City'}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Route Details */}
-          <div className="p-4 bg-white border-t">
-            <h3 className="font-semibold mb-2">Route Information</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Distance:</span>
-                <span className="font-medium">
-                  {routeMetrics.distance > 0 ? `${routeMetrics.distance} km` : 'Calculating...'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Estimated Time:</span>
-                <span className="font-medium">
-                  {routeMetrics.duration > 0 ? `${routeMetrics.duration} min` : 'Calculating...'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Service Type:</span>
-                <span className="font-medium capitalize">{order.service_type}</span>
-              </div>
+          {/* Events Timeline */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-gray-600" />
+              Live Events
+            </h3>
+            <div className="space-y-3">
+              {events.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <Navigation className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No events yet</p>
+                </div>
+              ) : (
+                events.map((event, idx) => (
+                  <div key={idx} className={`relative pl-6 pb-3 ${
+                    idx !== events.length - 1 ? 'border-l-2 border-gray-200' : ''
+                  }`}>
+                    <div className={`absolute left-0 top-0 -ml-1.5 w-3 h-3 rounded-full ${
+                      event.type === 'success' ? 'bg-green-500' :
+                      event.type === 'warning' ? 'bg-yellow-500' :
+                      'bg-blue-500'
+                    }`} />
+                    <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100">
+                      <div className="flex items-start gap-2">
+                        {event.type === 'success' ? <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" /> :
+                         event.type === 'warning' ? <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" /> :
+                         <Navigation className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900">{event.message}</div>
+                          <div className="text-xs text-gray-500 mt-1">{event.timestamp}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

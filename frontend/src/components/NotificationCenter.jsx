@@ -16,8 +16,20 @@ export default function NotificationCenter({ userId }) {
 
   const fetchNotifications = async () => {
     try {
-      const response = await fetch(`http://localhost:8001/api/notifications/${userId}`)
+      const token = localStorage.getItem('token')
+      const response = await fetch('http://localhost:8001/api/notifications', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (!response.ok) {
+        console.error('Failed to fetch notifications:', response.status)
+        return
+      }
+      
       const data = await response.json()
+      console.log('Notifications received:', data)
       setNotifications(data.notifications || [])
       setUnreadCount(data.unread_count || 0)
     } catch (error) {
@@ -57,14 +69,19 @@ export default function NotificationCenter({ userId }) {
   }
 
   const formatTime = (timestamp) => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diff = Math.floor((now - date) / 1000) // seconds
+    if (!timestamp) return 'Unknown'
+    try {
+      const date = new Date(timestamp)
+      const now = new Date()
+      const diff = Math.floor((now - date) / 1000) // seconds
 
-    if (diff < 60) return 'Just now'
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-    return date.toLocaleDateString()
+      if (diff < 60) return 'Just now'
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+      return date.toLocaleDateString()
+    } catch (e) {
+      return 'Unknown'
+    }
   }
 
   return (
@@ -126,7 +143,7 @@ export default function NotificationCenter({ userId }) {
                         </p>
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-xs text-gray-500">
-                            {formatTime(notification.timestamp)}
+                            {formatTime(notification.created_at || notification.timestamp)}
                           </span>
                           {!notification.read && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
@@ -149,7 +166,7 @@ export default function NotificationCenter({ userId }) {
                       )}
                     </div>
                   </div>
-                ))}
+                ))}}
               </div>
             )}
           </div>

@@ -554,18 +554,53 @@ async def get_driver_recommendations(order_id: str, current_admin: dict = Depend
 
 @router.post("/orders/{order_id}/auto-reassign")
 async def auto_reassign_order(order_id: str, current_admin: dict = Depends(get_current_admin)):
-    """Use AI to automatically reassign order to best driver"""
-    from main import orders_db, drivers_db, assign_best_driver, storage
+    """Use AI Agent to automatically reassign order to best driver"""
+    print(f"\n🤖 AI AGENT REASSIGN for order {order_id}", flush=True)
+    from main import orders_db, drivers_db, storage, CREW_AVAILABLE
     
     order = next((o for o in orders_db if o["id"] == order_id), None)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Get current driver to exclude
-    excluded = [order["assigned_driver"]] if order.get("assigned_driver") else []
+    # Get available drivers in pickup city
+    city_drivers = [d for d in drivers_db if 
+                   d.get("status") in ["available", "online"] and 
+                   d.get("assigned_city", "").lower() == order["pickup_city"].lower()]
     
-    # Use AI assignment
-    best_driver = assign_best_driver(order, excluded_drivers=excluded)
+    print(f"   Found {len(city_drivers)} drivers in {order['pickup_city']}", flush=True)
+    print(f"   CREW_AVAILABLE: {CREW_AVAILABLE}", flush=True)
+    
+    # Try AI Agent first
+    ai_reasoning = None
+    best_driver = None
+    
+    if CREW_AVAILABLE:
+        try:
+            print("   🤖 Calling CrewAI Agent...", flush=True)
+            from api.services.agent_service import AgentService
+            agent_service = AgentService()
+            result = await agent_service.recommend_driver(order, city_drivers)
+            
+            if result and result.get("driver"):
+                best_driver = result["driver"]
+                ai_reasoning = result.get("ai_reasoning", "AI Agent recommendation")
+                print(f"   ✅ AI Agent selected: {best_driver['name']}", flush=True)
+            else:
+                print("   ⚠️ AI Agent returned no driver", flush=True)
+        except Exception as e:
+            print(f"   ❌ AI Agent error: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+    else:
+        print("   ⚠️ CrewAI not available", flush=True)
+    
+    # Fallback to algorithm if AI failed
+    if not best_driver:
+        print("   Using fallback algorithm", flush=True)
+        from main import assign_best_driver
+        excluded = [order["assigned_driver"]] if order.get("assigned_driver") else []
+        best_driver = assign_best_driver(order, excluded_drivers=excluded)
+        ai_reasoning = "Algorithm-based (AI unavailable or failed)"
     
     if not best_driver:
         raise HTTPException(status_code=404, detail="No suitable driver found")
@@ -583,7 +618,7 @@ async def auto_reassign_order(order_id: str, current_admin: dict = Depends(get_c
     order["assigned_driver"] = best_driver["id"]
     order["status"] = "assigned"
     order["reassigned_at"] = datetime.now().isoformat()
-    order["reassign_reason"] = "AI auto-reassignment"
+    order["reassign_reason"] = ai_reasoning or "AI auto-reassignment"
     
     if order_id not in best_driver["current_orders"]:
         best_driver["current_orders"].append(order_id)
@@ -592,9 +627,12 @@ async def auto_reassign_order(order_id: str, current_admin: dict = Depends(get_c
     storage.update_order(order_id, order)
     storage.update_driver(best_driver["id"], best_driver)
     
+    print(f"   ✅ Reassignment complete\n", flush=True)
+    
     return {
         "success": True,
-        "message": f"Order auto-reassigned to {best_driver['name']}",
+        "message": f"Order reassigned to {best_driver['name']}",
+        "ai_reasoning": ai_reasoning,
         "driver": {
             "id": best_driver["id"],
             "name": best_driver["name"],

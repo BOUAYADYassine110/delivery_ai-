@@ -322,37 +322,71 @@ OLLAMA_MODEL=llama3.2
 - **Error Recovery**: Automatic error boundaries with reload
 - **Pricing Metadata**: Track pricing method and AI analysis
 
+## 🧹 Recent Cleanup (v3.0)
+
+### Removed Duplicates
+- **Components**: Consolidated route display components into `OptimizedRouteDisplay.jsx`
+- **Loading States**: Unified into `LoadingScreen.jsx`
+- **Backend Routes**: Merged enhanced routing into main `routing.py`
+- **Services**: Consolidated warehouse operations into `warehouse_manager.py`
+- **Debug Routes**: Removed development-only endpoints
+
+### Clean Architecture
+- Single source of truth for each feature
+- No duplicate endpoints or components
+- Streamlined codebase for easier maintenance
+- Production-ready structure
+
+---
+
 ## 📁 Project Structure
 
 ```
 delivery_ai-/
 ├── backend/
 │   ├── api/
-│   │   ├── routes/          # API endpoints
-│   │   ├── services/        # Business logic
+│   │   ├── routes/
+│   │   │   ├── admin_routes.py       # Admin endpoints
+│   │   │   ├── driver_management.py  # Driver endpoints
+│   │   │   ├── gps_routes.py         # GPS tracking
+│   │   │   └── routing.py            # Route optimization
+│   │   ├── services/
 │   │   │   ├── agent_service.py      # CrewAI agents
 │   │   │   ├── smart_assignment.py   # Driver assignment
-│   │   │   └── delivery_simulator.py # Simulation engine
+│   │   │   ├── delivery_simulator.py # Simulation engine
+│   │   │   ├── warehouse_manager.py  # Warehouse operations
+│   │   │   ├── inter_city_workflow.py # Inter-city logistics
+│   │   │   └── multi_package_optimizer.py # Route optimization
 │   │   ├── models/          # Data models
 │   │   └── schemas/         # Pydantic schemas
 │   ├── main.py             # FastAPI application
 │   ├── ai_pricing.py       # AI pricing integration
 │   ├── auth.py             # Authentication
 │   ├── storage.py          # Data storage layer
+│   ├── seed_data.py        # Initial data
 │   └── requirements.txt    # Python dependencies
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── OrderDetailsModal.jsx  # Modern order popup
-│   │   │   ├── NotificationCenter.jsx # Notifications
-│   │   │   └── ErrorBoundary.jsx      # Error handling
+│   │   │   ├── OrderDetailsModal.jsx     # Modern order popup
+│   │   │   ├── NotificationCenter.jsx    # Notifications
+│   │   │   ├── ErrorBoundary.jsx         # Error handling
+│   │   │   ├── LoadingScreen.jsx         # Loading states
+│   │   │   ├── OptimizedRouteDisplay.jsx # Route visualization
+│   │   │   ├── MapPicker.jsx             # Location picker
+│   │   │   └── [Other components]
 │   │   ├── pages/
-│   │   │   ├── CreateOrder.jsx        # Order creation with AI pricing
-│   │   │   ├── PricingCalculator.jsx  # AI pricing calculator
-│   │   │   └── CustomerDashboard.jsx  # Customer interface
+│   │   │   ├── CreateOrder.jsx           # Order creation with AI pricing
+│   │   │   ├── PricingCalculator.jsx     # AI pricing calculator
+│   │   │   ├── CustomerDashboard.jsx     # Customer interface
+│   │   │   ├── DriverDashboard.jsx       # Driver interface
+│   │   │   ├── AdminDashboard.jsx        # Admin interface
+│   │   │   └── [Other pages]
 │   │   ├── services/
-│   │   │   ├── pricingService.js      # AI pricing service
-│   │   │   └── api.js                 # API wrapper
+│   │   │   ├── pricingService.js         # AI pricing service
+│   │   │   ├── api.js                    # API wrapper
+│   │   │   ├── routingService.js         # Route services
+│   │   │   └── gpsService.js             # GPS services
 │   │   ├── utils/          # Utilities
 │   │   └── App.jsx         # Main app
 │   ├── package.json        # Node dependencies

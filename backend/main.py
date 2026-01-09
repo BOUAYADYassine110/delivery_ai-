@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -33,30 +33,19 @@ from api.services.warehouse_manager import WarehouseManager
 # Try to import CrewAI services (optional)
 try:
     from api.services.agent_service import AgentService
-    from api.services.warehouse_agent import (
-        check_warehouse_capacity, optimize_warehouse_routing, 
-        coordinate_warehouse_transport, predict_warehouse_capacity,
-        communicate_warehouse_status, get_warehouse_agent_status
-    )
     CREW_AVAILABLE = True
 except Exception as e:
-    print(f"âš ï¸  CrewAI not available: {e}")
+    print(f"⚠️  CrewAI not available: {e}")
     CREW_AVAILABLE = False
     def get_agent_status(): return {"status": "unavailable"}
     async def get_driver_recommendation(order, drivers): return None
     async def get_price_calculation(request): return None
-    async def check_warehouse_capacity(wh_id, warehouses, packages): return {"available": True}
-    async def optimize_warehouse_routing(order, warehouses): return {}
-    async def coordinate_warehouse_transport(wh_id, packages, schedule): return {}
-    async def predict_warehouse_capacity(wh_id, warehouses, data): return {}
-    async def communicate_warehouse_status(order, warehouses): return {}
-    def get_warehouse_agent_status(): return {"status": "unavailable"}
 
 try:
     from api.services.delivery_workflow import process_delivery_order, get_workflow_status
     WORKFLOW_AVAILABLE = True
 except Exception as e:
-    print(f"âš ï¸  Workflow not available: {e}")
+    print(f"⚠️  Workflow not available: {e}")
     WORKFLOW_AVAILABLE = False
     async def process_delivery_order(order, drivers): return None
     def get_workflow_status(): return {"status": "unavailable"}
@@ -83,13 +72,7 @@ app.include_router(driver_router, prefix="/api", tags=["Driver Management"])
 from api.routes.routing import router as routing_router
 app.include_router(routing_router, prefix="/api", tags=["Routing"])
 
-# Include enhanced routing
-from api.routes.enhanced_routing import router as enhanced_routing_router
-app.include_router(enhanced_routing_router, prefix="/api", tags=["Enhanced Routing"])
 
-# Debug routes
-from api.routes.assignment_debug import router as debug_router
-app.include_router(debug_router, prefix="/api", tags=["Debug"])
 
 # Admin routes
 from api.routes.admin_routes import router as admin_router
@@ -187,13 +170,25 @@ class AdminLoginRequest(BaseModel):
 @app.get("/api/agents/status")
 async def agents_status():
     """Get AI agents status"""
-    base_status = get_agent_status()
-    warehouse_status = get_warehouse_agent_status()
-    
-    return {
-        **base_status,
-        "warehouse_agent": warehouse_status
-    }
+    try:
+        if CREW_AVAILABLE:
+            from api.services.agent_service import AgentService
+            base_status = AgentService.get_agent_status()
+        else:
+            base_status = {"agents": [], "status": "unavailable"}
+        
+        return {
+            **base_status,
+            "crew_available": CREW_AVAILABLE
+        }
+    except Exception as e:
+        print(f"Error in agents_status: {e}")
+        return {
+            "agents": [],
+            "status": "error",
+            "error": str(e),
+            "crew_available": CREW_AVAILABLE
+        }
 
 @app.get("/api/workflow/status")
 async def workflow_status():
@@ -234,19 +229,19 @@ async def check_mongodb():
             "database": "delivery_system",
             "collections": collections,
             "document_counts": stats,
-            "message": "âœ… MongoDB is working!"
+            "message": "✅ MongoDB is working!"
         }
     except Exception as e:
         return {
             "status": "disconnected",
             "error": str(e),
-            "message": "âŒ MongoDB is not connected. Make sure MongoDB is running."
+            "message": "❌ MongoDB is not connected. Make sure MongoDB is running."
         }
 
 @app.get("/")
 def root():
     return {
-        "message": "ðŸš€ ULTIMATE MULTI-AGENT DELIVERY SYSTEM",
+        "message": "🚀 ULTIMATE MULTI-AGENT DELIVERY SYSTEM",
         "status": "running",
         "version": "3.0 ULTIMATE",
         "database": "In-memory (MongoDB not integrated yet)",
@@ -257,19 +252,19 @@ def root():
             "Marrakech": f"{len([d for d in drivers_db if d['assigned_city'] == 'Marrakech'])} drivers",
             "Agadir": f"{len([d for d in drivers_db if d['assigned_city'] == 'Agadir'])} drivers",
             "El Jadida": f"{len([d for d in drivers_db if d['assigned_city'] == 'El Jadida'])} drivers",
-            "SalÃ©": f"{len([d for d in drivers_db if d['assigned_city'] == 'SalÃ©'])} drivers"
+            "Salé": f"{len([d for d in drivers_db if d['assigned_city'] == 'Salé'])} drivers"
         },
         "ultimate_features": [
-            "ðŸŽ¯ Multi-driver city coverage (16 total drivers)",
-            "ðŸ§  AI-powered intelligent assignment",
-            "ðŸ“ Real-time location-based scoring",
-            "ðŸš— Vehicle-type optimization", 
-            "â­ Rating-based selection",
-            "ðŸŽª Specialty matching system",
-            "ðŸ“Š Load balancing algorithm",
-            "ðŸŒ¦ï¸ Weather-aware routing",
-            "ðŸ“¦ Multi-package optimization",
-            "ðŸª Warehouse management"
+            "🎯 Multi-driver city coverage (16 total drivers)",
+            "🧠 AI-powered intelligent assignment",
+            "📍 Real-time location-based scoring",
+            "🚗 Vehicle-type optimization", 
+            "⭐ Rating-based selection",
+            "🎪 Specialty matching system",
+            "📊 Load balancing algorithm",
+            "🌦️ Weather-aware routing",
+            "📦 Multi-package optimization",
+            "🏪 Warehouse management"
         ],
         "assignment_factors": {
             "city_match": "50% weight - Same city priority with GPS distance",
@@ -294,12 +289,12 @@ def test():
 # Initialize storage (MongoDB or in-memory based on USE_MONGODB env var)
 if USE_MONGODB:
     print("="*60)
-    print("ðŸ—„ï¸  MONGODB ENABLED - Data will persist between restarts")
+    print("🗄️  MONGODB ENABLED - Data will persist between restarts")
     print("="*60)
 else:
     print("="*60)
-    print("ðŸ’¾ IN-MEMORY MODE - Data will be lost on restart")
-    print("ðŸ’¡ Set USE_MONGODB=true in .env to enable persistence")
+    print("💾 IN-MEMORY MODE - Data will be lost on restart")
+    print("💡 Set USE_MONGODB=true in .env to enable persistence")
     print("="*60)
 
 # Get data from storage
@@ -500,21 +495,21 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     from datetime import datetime, timedelta
     
     print("\n" + "="*60)
-    print("ðŸš€ NEW ORDER CREATION STARTED")
+    print("🚀 NEW ORDER CREATION STARTED")
     print("="*60)
     
     order_id = f"ORD{random.randint(1000, 9999)}"
     tracking_number = f"TRK{random.randint(100, 999)}"
     
-    print(f"ðŸ“¦ Order ID: {order_id}")
-    print(f"ðŸ”¢ Tracking: {tracking_number}")
-    print(f"ðŸ‘¤ Customer: {current_user['username']}")
+    print(f"📦 Order ID: {order_id}")
+    print(f"🔢 Tracking: {tracking_number}")
+    print(f"👤 Customer: {current_user['username']}")
     
     # Enhanced pricing calculation in Dirhams
     is_inter_city = order.pickup_city.lower() != order.delivery_city.lower()
     
-    print(f"ðŸ™ï¸  Route: {order.pickup_city} â†’ {order.delivery_city}")
-    print(f"ðŸ“ Type: {'INTER-CITY' if is_inter_city else 'INTRA-CITY'}")
+    print(f"🏙️  Route: {order.pickup_city} → {order.delivery_city}")
+    print(f"📍 Type: {'INTER-CITY' if is_inter_city else 'INTRA-CITY'}")
     
     if is_inter_city:
         # Inter-city pricing
@@ -534,7 +529,7 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     service_multiplier = {"standard": 1.0, "express": 1.5}.get(order.service_type, 1.0)  # Reduced express from 1.8 to 1.5
     total_cost = (base_price + distance_cost + weight_cost + dimension_cost + warehouse_fee) * service_multiplier
     
-    print(f"\nðŸ’° PRICING CALCULATION:")
+    print(f"\n💰 PRICING CALCULATION:")
     print(f"   Base: {base_price} MAD")
     print(f"   Distance: {distance_cost:.2f} MAD")
     print(f"   Weight: {weight_cost:.2f} MAD")
@@ -595,7 +590,7 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     orders_db.append(new_order)
     storage.add_order(new_order)  # Save to storage (MongoDB or in-memory)
     
-    print(f"\nðŸ¤– AI AGENT PROCESSING:")
+    print(f"\n🤖 AI AGENT PROCESSING:")
     
     # Refresh drivers from storage to get latest data
     refresh_data()
@@ -625,7 +620,7 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     
     # For intra-city: STRICT city matching, auto-accept
     if not is_inter_city:
-        print(f"\nðŸŽ¯ INTRA-CITY ASSIGNMENT (Auto-Accept):")
+        print(f"\n🎯 INTRA-CITY ASSIGNMENT (Auto-Accept):")
         # Only drivers from the SAME city
         same_city_drivers = [d for d in drivers_db if 
                            d.get("status") in ["available", "online"] and
@@ -633,12 +628,12 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
         
         print(f"   Analyzing {len(same_city_drivers)} drivers...")
         if same_city_drivers:
-            print(f"   ðŸ§  AI Agent: Calculating best driver match...")
+            print(f"   🧠 AI Agent: Calculating best driver match...")
             best_driver = await assignment_service.find_best_driver(new_order, same_city_drivers)
             if best_driver:
-                print(f"   âœ… Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
-                print(f"   ðŸ“Š Rating: {best_driver['rating']}/5.0")
-                print(f"   ðŸš— Vehicle: {best_driver['vehicle_type'].upper()}")
+                print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
+                print(f"   📊 Rating: {best_driver['rating']}/5.0")
+                print(f"   🚗 Vehicle: {best_driver['vehicle_type'].upper()}")
                 new_order["assigned_driver"] = best_driver["id"]
                 new_order["status"] = "assigned"  # Auto-accept for intra-city
                 best_driver["current_orders"].append(order_id)
@@ -658,34 +653,34 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
                         drivers_db[i] = best_driver
                         break
                 
-                print(f"   âš¡ Status: AUTO-ACCEPTED & SAVED")
+                print(f"   ⚡ Status: AUTO-ACCEPTED & SAVED")
             else:
-                print(f"   âŒ No suitable driver found")
+                print(f"   ❌ No suitable driver found")
         else:
-            print(f"   âš ï¸  No available drivers in {order.pickup_city}")
+            print(f"   ⚠️  No available drivers in {order.pickup_city}")
     else:
-        print(f"\nðŸŒ INTER-CITY ASSIGNMENT (Manual Accept):")
+        print(f"\n🌍 INTER-CITY ASSIGNMENT (Manual Accept):")
         # For inter-city: use existing workflow
         best_driver = None
         if WORKFLOW_AVAILABLE:
             try:
-                print(f"   ðŸ¤– AI Workflow: Processing inter-city delivery...")
+                print(f"   🤖 AI Workflow: Processing inter-city delivery...")
                 workflow_result = await process_delivery_order(new_order, city_drivers)
                 if workflow_result and "best_driver" in workflow_result:
                     best_driver = workflow_result["best_driver"]
                     new_order["ai_workflow"] = workflow_result.get("workflow")
                     new_order["agents_used"] = workflow_result.get("agents_used", [])
-                    print(f"   âœ… Workflow completed")
+                    print(f"   ✅ Workflow completed")
             except Exception as e:
-                print(f"   âš ï¸  Workflow error: {e}")
+                print(f"   ⚠️  Workflow error: {e}")
         
         if not best_driver:
-            print(f"   ðŸ§  AI Agent: Finding best driver...")
+            print(f"   🧠 AI Agent: Finding best driver...")
             best_driver = await assignment_service.find_best_driver(new_order, city_drivers)
         
         if best_driver:
-            print(f"   âœ… Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
-            print(f"   ðŸ“Š Rating: {best_driver['rating']}/5.0")
+            print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
+            print(f"   📊 Rating: {best_driver['rating']}/5.0")
             new_order["assigned_driver"] = best_driver["id"]
             new_order["status"] = "pending_acceptance"
             new_order["assignment_attempts"] = 1
@@ -699,18 +694,18 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
                     orders_db[i] = new_order
                     break
             
-            print(f"   â³ Status: PENDING DRIVER ACCEPTANCE & SAVED")
+            print(f"   ⏳ Status: PENDING DRIVER ACCEPTANCE & SAVED")
         else:
-            print(f"   âŒ No suitable driver found")
+            print(f"   ❌ No suitable driver found")
     
     print("\n" + "="*60)
-    print("âœ… ORDER CREATED SUCCESSFULLY")
+    print("✅ ORDER CREATED SUCCESSFULLY")
     print("="*60 + "\n")
     
     # Start delivery simulation if order is assigned
     if new_order.get("assigned_driver") and new_order["status"] == "assigned":
         simulator.start_simulation(order_id, new_order, orders_db)
-        print(f"ðŸŽ¬ Delivery simulation started for order {order_id}")
+        print(f"🎬 Delivery simulation started for order {order_id}")
     
     # Clean MongoDB ObjectId before returning
     if USE_MONGODB:
@@ -854,7 +849,198 @@ def complete_delivery_final(completion_data: dict):
         return {"success": True, "message": "Delivery completed"}
     return {"error": "Order or driver not found"}
 
-@app.get("/api/admin/orders")
+@app.post("/api/admin/orders/{order_id}/auto-reassign")
+async def auto_reassign_order(order_id: str, current_admin: dict = Depends(get_current_admin)):
+    """AI Agent-powered automatic order reassignment"""
+    import sys
+    sys.stdout.flush()
+    print(f"\n?? AI REASSIGN REQUEST for order {order_id}", flush=True)
+    refresh_data()
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Get available drivers in pickup city
+    city_drivers = [d for d in drivers_db if 
+                   d.get("status") in ["available", "online"] and 
+                   d.get("assigned_city", "").lower() == order["pickup_city"].lower()]
+    
+    print(f"   Found {len(city_drivers)} available drivers in {order['pickup_city']}")
+    
+    if not city_drivers:
+        raise HTTPException(status_code=400, detail=f"No available drivers in {order['pickup_city']}")
+    
+    # Use AI Agent for driver recommendation
+    print(f"   CREW_AVAILABLE: {CREW_AVAILABLE}")
+    
+    if CREW_AVAILABLE:
+        try:
+            print("   ?? Calling AI Agent...")
+            agent_service = AgentService()
+            result = await agent_service.recommend_driver(order, city_drivers)
+            
+            if result and result.get("driver"):
+                best_driver = result["driver"]
+                ai_reasoning = result.get("ai_reasoning", "AI analysis")
+                print(f"   ? AI Agent selected: {best_driver['name']}")
+                print(f"   ?? AI Reasoning: {ai_reasoning}")
+            else:
+                print("   ?? AI Agent returned no driver, using fallback")
+                assignment_service = SmartAssignmentService()
+                best_driver = await assignment_service.find_best_driver(order, city_drivers)
+                ai_reasoning = "Fallback to algorithm"
+        except Exception as e:
+            print(f"   ? AI Agent failed: {e}")
+            import traceback
+            traceback.print_exc()
+            assignment_service = SmartAssignmentService()
+            best_driver = await assignment_service.find_best_driver(order, city_drivers)
+            ai_reasoning = f"Fallback to algorithm (Error: {str(e)})"
+    else:
+        print("   ?? CrewAI not available, using algorithm")
+        assignment_service = SmartAssignmentService()
+        best_driver = await assignment_service.find_best_driver(order, city_drivers)
+        ai_reasoning = "Algorithm-based (CrewAI unavailable)"
+    
+    if not best_driver:
+        raise HTTPException(status_code=400, detail="No suitable driver found")
+    
+    # Remove from old driver if assigned
+    if order.get("assigned_driver"):
+        old_driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
+        if old_driver and order_id in old_driver.get("current_orders", []):
+            old_driver["current_orders"].remove(order_id)
+            storage.update_driver(old_driver["id"], old_driver)
+    
+    # Assign to new driver
+    order["assigned_driver"] = best_driver["id"]
+    order["status"] = "assigned" if not order.get("is_inter_city") else "pending_acceptance"
+    order["reassigned_at"] = datetime.now().isoformat()
+    order["reassigned_by"] = "AI Agent"
+    order["ai_reasoning"] = ai_reasoning
+    
+    if order_id not in best_driver.get("current_orders", []):
+        best_driver["current_orders"].append(order_id)
+    best_driver["status"] = "busy"
+    
+    storage.update_order(order_id, order)
+    storage.update_driver(best_driver["id"], best_driver)
+    
+    print(f"   ? Reassignment complete\n")
+    
+    return {
+        "message": f"Order reassigned to {best_driver['name']} by AI Agent",
+        "driver": {
+            "id": best_driver["id"],
+            "name": best_driver["name"],
+            "vehicle_type": best_driver["vehicle_type"],
+            "rating": best_driver["rating"]
+        },
+        "ai_reasoning": ai_reasoning,
+        "order": order
+    }
+
+@app.get("/api/admin/orders/{order_id}/driver-recommendations")
+async def get_driver_recommendations(order_id: str, current_admin: dict = Depends(get_current_admin)):
+    """Get AI-powered driver recommendations for order"""
+    refresh_data()
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    pickup_coords = order.get("pickup_coordinates") or get_city_coordinates(order["pickup_city"])
+    
+    # Get all drivers in pickup city
+    city_drivers = [d for d in drivers_db if 
+                   d.get("assigned_city", "").lower() == order["pickup_city"].lower()]
+    
+    # Score each driver
+    recommendations = []
+    for driver in city_drivers:
+        score = calculate_ultimate_driver_score(driver, order, pickup_coords)
+        available = driver.get("status") in ["available", "online"] and \
+                   len(driver.get("current_orders", [])) < get_max_orders_for_vehicle(driver["vehicle_type"])
+        
+        recommendations.append({
+            "driver_id": driver["id"],
+            "name": driver["name"],
+            "vehicle_type": driver["vehicle_type"],
+            "rating": driver["rating"],
+            "status": driver["status"],
+            "current_orders": len(driver.get("current_orders", [])),
+            "score": round(score, 1),
+            "available": available
+        })
+    
+    # Sort by score descending
+    recommendations.sort(key=lambda x: x["score"], reverse=True)
+    
+    return {"recommendations": recommendations[:10]}
+
+@app.post("/api/admin/orders/{order_id}/reassign")
+async def manual_reassign_order(order_id: str, data: dict, current_admin: dict = Depends(get_current_admin)):
+    """Manually reassign order to specific driver"""
+    refresh_data()
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    new_driver_id = data.get("new_driver_id")
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    new_driver = next((d for d in drivers_db if d["id"] == new_driver_id), None)
+    if not new_driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    
+    # Remove from old driver
+    if order.get("assigned_driver"):
+        old_driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
+        if old_driver and order_id in old_driver.get("current_orders", []):
+            old_driver["current_orders"].remove(order_id)
+            storage.update_driver(old_driver["id"], old_driver)
+    
+    # Assign to new driver
+    order["assigned_driver"] = new_driver_id
+    order["status"] = "assigned" if not order.get("is_inter_city") else "pending_acceptance"
+    order["reassigned_at"] = datetime.now().isoformat()
+    order["reassigned_by"] = f"Admin: {current_admin['username']}"
+    
+    if order_id not in new_driver.get("current_orders", []):
+        new_driver["current_orders"].append(order_id)
+    new_driver["status"] = "busy"
+    
+    storage.update_order(order_id, order)
+    storage.update_driver(new_driver_id, new_driver)
+    
+    return {
+        "message": f"Order reassigned to {new_driver['name']}",
+        "driver": new_driver,
+        "order": order
+    }
+
+@app.post("/api/admin/orders/{order_id}/cancel")
+async def cancel_order(order_id: str, data: dict, current_admin: dict = Depends(get_current_admin)):
+    """Cancel an order"""
+    refresh_data()
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Remove from driver
+    if order.get("assigned_driver"):
+        driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
+        if driver and order_id in driver.get("current_orders", []):
+            driver["current_orders"].remove(order_id)
+            if not driver["current_orders"]:
+                driver["status"] = "available"
+            storage.update_driver(driver["id"], driver)
+    
+    order["status"] = "cancelled"
+    order["cancelled_at"] = datetime.now().isoformat()
+    order["cancellation_reason"] = data.get("reason", "Admin cancellation")
+    
+    storage.update_order(order_id, order)
+    
+    return {"message": "Order cancelled successfully", "order": order}
 def get_all_orders(current_admin: dict = Depends(get_current_admin)):
     # Fetch fresh data from storage
     all_orders = storage.get_orders()
@@ -874,6 +1060,66 @@ def get_all_orders(current_admin: dict = Depends(get_current_admin)):
     
     return {"orders": enriched_orders, "total": len(enriched_orders)}
 
+@app.get("/api/admin/analytics")
+def get_admin_analytics(current_admin: dict = Depends(get_current_admin)):
+    total_orders = len(orders_db)
+    pending_orders = len([o for o in orders_db if o["status"] in ["pending_assignment", "pending_acceptance"]])
+    in_progress = len([o for o in orders_db if o["status"] in ["picked_up", "in_transit", "assigned", "accepted"]])
+    completed = len([o for o in orders_db if o["status"] == "delivered"])
+    active_drivers = len([d for d in drivers_db if d["status"] in ["available", "busy", "online"]])
+    
+    return {
+        "total_orders": total_orders,
+        "pending_orders": pending_orders,
+        "in_progress": in_progress,
+        "completed": completed,
+        "active_drivers": active_drivers
+    }
+
+@app.get("/api/admin/analytics/advanced")
+def get_advanced_analytics(current_admin: dict = Depends(get_current_admin)):
+    refresh_data()
+    
+    total_revenue = sum([o.get("total_cost", o.get("price", 0)) for o in orders_db if o["status"] == "delivered"])
+    today_revenue = sum([o.get("total_cost", o.get("price", 0)) for o in orders_db 
+                        if o["status"] == "delivered" and o.get("delivered_at", "").startswith(datetime.now().strftime("%Y-%m-%d"))])
+    
+    total_drivers = len(drivers_db)
+    online_drivers = len([d for d in drivers_db if d["status"] in ["available", "online"]])
+    busy_drivers = len([d for d in drivers_db if d["status"] == "busy"])
+    offline_drivers = len([d for d in drivers_db if d["status"] == "offline"])
+    
+    driver_performance = []
+    for driver in drivers_db:
+        driver_orders = [o for o in orders_db if o.get("assigned_driver") == driver["id"]]
+        completed_orders = [o for o in driver_orders if o["status"] == "delivered"]
+        total_orders = len(driver_orders)
+        success_rate = (len(completed_orders) / total_orders * 100) if total_orders > 0 else 0
+        earnings = sum([o.get("total_cost", 0) * 0.15 for o in completed_orders])
+        
+        driver_performance.append({
+            "driver_id": driver["id"],
+            "name": driver["name"],
+            "total_orders": total_orders,
+            "completed_orders": len(completed_orders),
+            "success_rate": round(success_rate, 1),
+            "avg_delivery_time": 45,
+            "rating": driver["rating"],
+            "earnings": round(earnings, 2)
+        })
+    
+    return {
+        "revenue": {"total": round(total_revenue, 2), "today": round(today_revenue, 2)},
+        "fleet_status": {"total_drivers": total_drivers, "online_drivers": online_drivers, "busy_drivers": busy_drivers, "offline_drivers": offline_drivers},
+        "driver_performance": driver_performance
+    }
+
+@app.get("/api/admin/live-map")
+def get_live_map(current_admin: dict = Depends(get_current_admin)):
+    refresh_data()
+    drivers_data = [{"id": d["id"], "name": d["name"], "location": d["current_location"], "status": d["status"], "vehicle_type": d["vehicle_type"], "current_orders": len(d.get("current_orders", [])), "rating": d["rating"]} for d in drivers_db]
+    return {"drivers": drivers_data, "orders": []}
+
 @app.get("/api/admin/drivers")
 def get_all_drivers(current_admin: dict = Depends(get_current_admin)):
     enriched_drivers = []
@@ -890,23 +1136,7 @@ def get_all_drivers(current_admin: dict = Depends(get_current_admin)):
     
     return {"drivers": enriched_drivers, "total": len(enriched_drivers)}
 
-@app.get("/api/admin/analytics")
-def get_admin_analytics(current_admin: dict = Depends(get_current_admin)):
-    total_orders = len(orders_db)
-    pending_orders = len([o for o in orders_db if o["status"] in ["pending_assignment", "pending_acceptance"]])
-    in_progress = len([o for o in orders_db if o["status"] in ["picked_up", "in_transit", "assigned", "accepted"]])
-    completed = len([o for o in orders_db if o["status"] == "delivered"])
-    active_drivers = len([d for d in drivers_db if d["status"] in ["available", "busy", "online"]])
-    
-    revenue = sum([o.get("total_cost", o.get("price", 0)) for o in orders_db if o["status"] == "delivered"])
-    
-    return {
-        "total_orders": total_orders,
-        "pending_orders": pending_orders,
-        "in_progress": in_progress,
-        "completed": completed,
-        "active_drivers": active_drivers
-    }
+
 
 def calculate_inter_city_distance(city1: str, city2: str) -> float:
     """Calculate approximate distance between Moroccan cities in km"""
@@ -914,15 +1144,15 @@ def calculate_inter_city_distance(city1: str, city2: str) -> float:
         ("casablanca", "rabat"): 87,
         ("casablanca", "marrakech"): 239,
         ("casablanca", "el jadida"): 99,
-        ("casablanca", "salÃ©"): 91,
+        ("casablanca", "salé"): 91,
         ("casablanca", "agadir"): 508,
         ("rabat", "marrakech"): 325,
         ("rabat", "el jadida"): 140,
-        ("rabat", "salÃ©"): 12,
+        ("rabat", "salé"): 12,
         ("rabat", "agadir"): 588,
         ("marrakech", "agadir"): 269,
         ("marrakech", "el jadida"): 338,
-        ("marrakech", "salÃ©"): 337
+        ("marrakech", "salé"): 337
     }
     
     key = tuple(sorted([city1.lower(), city2.lower()]))
@@ -1148,7 +1378,7 @@ def get_city_coordinates(city: str) -> dict:
         "rabat": {"lat": 34.0209, "lng": -6.8416},
         "marrakech": {"lat": 31.6295, "lng": -7.9811},
         "el jadida": {"lat": 33.2316, "lng": -8.5007},
-        "salÃ©": {"lat": 34.0531, "lng": -6.7985},
+        "salé": {"lat": 34.0531, "lng": -6.7985},
         "agadir": {"lat": 30.4278, "lng": -9.5981}
     }
     return coordinates.get(city.lower(), coordinates["casablanca"])
@@ -1385,7 +1615,7 @@ def get_all_city_coordinates() -> dict:
         "Rabat": {"lat": 34.0209, "lng": -6.8416},
         "Marrakech": {"lat": 31.6295, "lng": -7.9811},
         "El Jadida": {"lat": 33.2316, "lng": -8.5007},
-        "SalÃ©": {"lat": 34.0531, "lng": -6.7985},
+        "Salé": {"lat": 34.0531, "lng": -6.7985},
         "Agadir": {"lat": 30.4278, "lng": -9.5981}
     }
 
@@ -1433,6 +1663,7 @@ def update_delivery_status(order_id: str, update: DeliveryUpdate):
     if not order:
         return {"error": "Order not found"}
     
+    old_status = order["status"]
     order["status"] = update.status
     order["delivery_notes"] = update.notes
     order["proof_photo"] = update.proof_photo
@@ -1442,26 +1673,34 @@ def update_delivery_status(order_id: str, update: DeliveryUpdate):
     storage.update_order(order_id, order)
     
     # If delivered, free up driver and send notification to customer
-    if update.status == "delivered" and order["assigned_driver"]:
-        driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
-        if driver and order_id in driver["current_orders"]:
-            driver["current_orders"].remove(order_id)
-            driver["total_deliveries"] += 1
-            storage.update_driver(driver["id"], driver)
+    if update.status == "delivered" and old_status != "delivered":
+        print(f"\n?? SENDING DELIVERY NOTIFICATION for order {order_id}")
+        print(f"   User ID: {order.get('user_id')}")
+        print(f"   Tracking: {order.get('tracking_number', order_id)}")
+        
+        if order.get("assigned_driver"):
+            driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
+            if driver and order_id in driver.get("current_orders", []):
+                driver["current_orders"].remove(order_id)
+                driver["total_deliveries"] += 1
+                storage.update_driver(driver["id"], driver)
         
         # Send notification to customer
         notification = {
-            "id": f"notif_{order_id}_{datetime.now().timestamp()}",
+            "id": f"notif_{order_id}_{int(datetime.now().timestamp() * 1000)}",
             "user_id": order.get("user_id"),
             "type": "delivery_completed",
-            "title": "Package Delivered!",
-            "message": f"Your package (Tracking: {order['tracking_number']}) has been delivered successfully.",
+            "title": "?? Package Delivered!",
+            "message": f"Your package (Tracking: {order.get('tracking_number', order_id)}) has been delivered successfully.",
             "order_id": order_id,
             "read": False,
             "created_at": datetime.now().isoformat()
         }
         notifications_db.append(notification)
         storage.add_notification(notification)
+        
+        print(f"   ? Notification created: {notification['id']}")
+        print(f"   Total notifications in DB: {len(notifications_db)}")
     
     return {"message": "Status updated", "order": order}
 
@@ -1616,7 +1855,7 @@ def get_weather(city: str):
         "rabat": {"lat": 34.0209, "lon": -6.8416},
         "marrakech": {"lat": 31.6295, "lon": -7.9811},
         "el jadida": {"lat": 33.2316, "lon": -8.5007},
-        "salÃ©": {"lat": 34.0531, "lon": -6.7985},
+        "salé": {"lat": 34.0531, "lon": -6.7985},
         "agadir": {"lat": 30.4278, "lon": -9.5981}
     }
     
@@ -1788,7 +2027,7 @@ def get_supported_cities():
             {"name": "Rabat", "code": "RAB", "warehouse": True, "hub": True},
             {"name": "Marrakech", "code": "MAR", "warehouse": True, "hub": False},
             {"name": "El Jadida", "code": "JAD", "warehouse": True, "hub": False},
-            {"name": "SalÃ©", "code": "SAL", "warehouse": True, "hub": False},
+            {"name": "Salé", "code": "SAL", "warehouse": True, "hub": False},
             {"name": "Agadir", "code": "AGA", "warehouse": True, "hub": False}
         ],
         "inter_city_routes": [
@@ -1796,7 +2035,7 @@ def get_supported_cities():
             {"from": "Casablanca", "to": "Marrakech", "schedule": "Daily at 09:00, 15:00", "duration": "3 hours", "next_departure": "09:00"},
             {"from": "Casablanca", "to": "Agadir", "schedule": "Every 2 days at 07:00", "duration": "6 hours", "next_departure": "07:00"},
             {"from": "Casablanca", "to": "El Jadida", "schedule": "Daily at 10:00, 16:00", "duration": "1.5 hours", "next_departure": "10:00"},
-            {"from": "Rabat", "to": "SalÃ©", "schedule": "Every 2 hours", "duration": "30 minutes", "next_departure": "Every 2 hours"},
+            {"from": "Rabat", "to": "Salé", "schedule": "Every 2 hours", "duration": "30 minutes", "next_departure": "Every 2 hours"},
             {"from": "Rabat", "to": "Marrakech", "schedule": "Daily at 08:00", "duration": "4 hours", "next_departure": "08:00"}
         ],
         "warehouse_info": {
@@ -1996,7 +2235,39 @@ def process_warehouse_package(order_id: str):
     return {"message": "Package dispatched to destination city", "order": order}
 
 @app.get("/api/pricing/calculate")
-def calculate_pricing(pickup_city: str, delivery_city: str, weight: float = 1.0, service_type: str = "standard"):
+def calculate_pricing_get(pickup_city: str, delivery_city: str, weight: float = 1.0, service_type: str = "standard"):
+    is_inter_city = pickup_city.lower() != delivery_city.lower()
+    
+    if is_inter_city:
+        base_price = 50.0
+        distance_cost = calculate_inter_city_distance(pickup_city, delivery_city) * 0.6
+        weight_cost = weight * 4.0
+    else:
+        base_price = 15.0
+        distance_cost = 10.0
+        weight_cost = weight * 2.0
+    
+    service_multiplier = {"standard": 1.0, "express": 1.5}.get(service_type, 1.0)
+    total_cost = (base_price + distance_cost + weight_cost) * service_multiplier
+    
+    return {
+        "base_price": base_price,
+        "distance_cost": distance_cost,
+        "weight_cost": weight_cost,
+        "service_multiplier": service_multiplier,
+        "total_cost": round(total_cost, 2),
+        "currency": "MAD",
+        "is_inter_city": is_inter_city,
+        "pricing_method": "formula"
+    }
+
+@app.post("/api/pricing/calculate")
+def calculate_pricing(data: dict):
+    pickup_city = data.get("pickup_city")
+    delivery_city = data.get("delivery_city")
+    weight = data.get("weight", 1.0)
+    service_type = data.get("service_type", "standard")
+    
     is_inter_city = pickup_city.lower() != delivery_city.lower()
     
     if is_inter_city:
@@ -2028,8 +2299,18 @@ notifications_db = []
 def get_notifications(current_user: dict = Depends(get_current_client)):
     """Get notifications for current user"""
     user_id = current_user["id"]
+    print(f"\n?? FETCHING NOTIFICATIONS for user: {user_id}")
+    
+    # Refresh data from storage
+    refresh_data()
+    
     user_notifications = [n for n in notifications_db if n.get("user_id") == user_id]
     unread_count = len([n for n in user_notifications if not n.get("read", False)])
+    
+    print(f"   Total notifications in DB: {len(notifications_db)}")
+    print(f"   User notifications: {len(user_notifications)}")
+    print(f"   Unread: {unread_count}")
+    
     return {"notifications": user_notifications, "unread_count": unread_count}
 
 @app.post("/api/notifications/send")
@@ -2048,9 +2329,18 @@ def get_user_notifications(user_id: str):
 
 @app.post("/api/notifications/{notification_id}/read")
 def mark_notification_read(notification_id: str):
+    refresh_data()
     notification = next((n for n in notifications_db if n["id"] == notification_id), None)
     if notification:
         notification["read"] = True
+        storage.update_notification(notification_id, {"read": True})
+        
+        # Update in-memory list
+        for i, n in enumerate(notifications_db):
+            if n["id"] == notification_id:
+                notifications_db[i] = notification
+                break
+        
         return {"message": "Notification marked as read", "notification": notification}
     return {"error": "Notification not found"}
 
@@ -2704,38 +2994,39 @@ def update_workflow_status(order_id: str, status_data: dict):
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("ðŸš€ ULTIMATE MULTI-AGENT DELIVERY SYSTEM v3.0 ðŸš€")
+    print("🚀 ULTIMATE MULTI-AGENT DELIVERY SYSTEM v3.0 🚀")
     print("=" * 80)
-    print("âœ… Multi-Driver City Coverage (16 total drivers)")
-    print("âœ… AI-Powered Intelligent Assignment")
-    print("âœ… Real-time Location-Based Scoring")
-    print("âœ… Vehicle-Type Optimization")
-    print("âœ… Rating-Based Selection")
-    print("âœ… Specialty Matching System")
-    print("âœ… Load Balancing Algorithm")
-    print("âœ… Weather-Aware Routing")
-    print("âœ… Multi-Package Optimization")
-    print("âœ… Warehouse Management")
+    print("✅ Multi-Driver City Coverage (16 total drivers)")
+    print("✅ AI-Powered Intelligent Assignment")
+    print("✅ Real-time Location-Based Scoring")
+    print("✅ Vehicle-Type Optimization")
+    print("✅ Rating-Based Selection")
+    print("✅ Specialty Matching System")
+    print("✅ Load Balancing Algorithm")
+    print("✅ Weather-Aware Routing")
+    print("✅ Multi-Package Optimization")
+    print("✅ Warehouse Management")
     print("=" * 80)
-    print("ðŸ™ï¸  ULTIMATE CITY COVERAGE:")
-    print("   â€¢ Casablanca â†’ 4 drivers (Ahmed, Youssef, Fatima, Karim)")
-    print("   â€¢ Rabat â†’ 3 drivers (Laila, Omar, Nadia)")
-    print("   â€¢ Marrakech â†’ 3 drivers (Hassan, Aicha, Rachid)")
-    print("   â€¢ Agadir â†’ 2 drivers (Khadija, Mehdi)")
-    print("   â€¢ El Jadida â†’ 2 drivers (Zineb, Samir)")
-    print("   â€¢ SalÃ© â†’ 2 drivers (Amina, Khalid)")
+    print("🏙️  ULTIMATE CITY COVERAGE:")
+    print("   • Casablanca → 4 drivers (Ahmed, Youssef, Fatima, Karim)")
+    print("   • Rabat → 3 drivers (Laila, Omar, Nadia)")
+    print("   • Marrakech → 3 drivers (Hassan, Aicha, Rachid)")
+    print("   • Agadir → 2 drivers (Khadija, Mehdi)")
+    print("   • El Jadida → 2 drivers (Zineb, Samir)")
+    print("   • Salé → 2 drivers (Amina, Khalid)")
     print("=" * 80)
-    print("ðŸŽ¯ ASSIGNMENT FACTORS:")
-    print("   â€¢ Location Proximity: 40% (GPS distance)")
-    print("   â€¢ Vehicle Suitability: 25% (type, capacity, speed)")
-    print("   â€¢ Driver Rating: 15% (customer satisfaction)")
-    print("   â€¢ Current Load: 10% (workload balancing)")
-    print("   â€¢ Specialties: 10% (skill matching)")
+    print("🎯 ASSIGNMENT FACTORS:")
+    print("   • Location Proximity: 40% (GPS distance)")
+    print("   • Vehicle Suitability: 25% (type, capacity, speed)")
+    print("   • Driver Rating: 15% (customer satisfaction)")
+    print("   • Current Load: 10% (workload balancing)")
+    print("   • Specialties: 10% (skill matching)")
     print("=" * 80)
-    print("ðŸŒ URLs:")
+    print("🌐 URLs:")
     print("   Backend: http://localhost:8001")
     print("   API Docs: http://localhost:8001/docs")
     print("   Coverage: http://localhost:8001/api/system/coverage")
     print("   Simulator: http://localhost:8001/api/assignment/simulate")
     print("=" * 80)
     uvicorn.run(app, host="0.0.0.0", port=8001)
+

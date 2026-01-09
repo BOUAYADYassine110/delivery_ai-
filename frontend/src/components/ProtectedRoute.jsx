@@ -1,12 +1,12 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Loading from '../components/Loading';
+import LoadingScreen from '../components/LoadingScreen';
 
 export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { user, loading } = useAuth();
 
-  if (loading) return <Loading />;
+  if (loading) return <LoadingScreen />;
 
   if (!user) return <Navigate to="/" replace />;
 
@@ -20,7 +20,7 @@ export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 export const PublicRoute = ({ children }) => {
   const { user, loading, getDashboardRoute } = useAuth();
 
-  if (loading) return <Loading />;
+  if (loading) return <LoadingScreen />;
 
   if (user) return <Navigate to={getDashboardRoute(user.role)} replace />;
 

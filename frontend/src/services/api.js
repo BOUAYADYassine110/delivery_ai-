@@ -78,7 +78,11 @@ export const api = {
   
   // Admin - Order Management
   getDriverRecommendations: (orderId) => axios.get(`${API_BASE}/admin/orders/${orderId}/driver-recommendations`),
-  autoReassignOrder: (orderId) => axios.post(`${API_BASE}/admin/orders/${orderId}/auto-reassign`),
+  autoReassignOrder: (orderId) => {
+    console.log('autoReassignOrder called with orderId:', orderId);
+    console.log('Admin token:', localStorage.getItem('admin_token'));
+    return axios.post(`${API_BASE}/admin/orders/${orderId}/auto-reassign`)
+  },
   manualReassignOrder: (orderId, data) => axios.post(`${API_BASE}/admin/orders/${orderId}/reassign`, data),
   cancelOrder: (orderId, reason) => axios.post(`${API_BASE}/admin/orders/${orderId}/cancel`, { reason }),
   

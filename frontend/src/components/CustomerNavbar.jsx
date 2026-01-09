@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Package, Plus, Search, Bell, LogOut, User, X, Calculator } from 'lucide-react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import OrderDetailsModal from './OrderDetailsModal'
 
 export default function CustomerNavbar() {
   const { user, logout } = useAuth()
@@ -11,6 +12,8 @@ export default function CustomerNavbar() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [selectedOrder, setSelectedOrder] = useState(null)
+  const [showOrderModal, setShowOrderModal] = useState(false)
 
   const isActive = (path) => location.pathname === path
 
@@ -31,8 +34,8 @@ export default function CustomerNavbar() {
       
       if (response.ok) {
         const data = await response.json()
-        setNotifications(data.slice(0, 10))
-        setUnreadCount(data.filter(n => !n.read).length)
+        setNotifications(data.notifications || [])
+        setUnreadCount(data.unread_count || 0)
       }
     } catch (error) {
       console.error('Failed to fetch notifications:', error)
@@ -46,9 +49,38 @@ export default function CustomerNavbar() {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      fetchNotifications()
+      
+      // Update local state immediately
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+      )
+      setUnreadCount(prev => Math.max(0, prev - 1))
     } catch (error) {
       console.error('Failed to mark as read:', error)
+    }
+  }
+
+  const handleNotificationClick = async (notif) => {
+    // Mark as read immediately
+    if (!notif.read) {
+      await markAsRead(notif.id)
+    }
+    
+    if (notif.order_id) {
+      try {
+        const token = localStorage.getItem('token')
+        const response = await fetch(`http://localhost:8001/api/orders/${notif.order_id}/track`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setSelectedOrder(data.order)
+          setShowOrderModal(true)
+          setShowNotifications(false)
+        }
+      } catch (error) {
+        console.error('Failed to fetch order:', error)
+      }
     }
   }
 
@@ -156,7 +188,7 @@ export default function CustomerNavbar() {
                           className={`px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${
                             !notif.read ? 'bg-blue-50' : ''
                           }`}
-                          onClick={() => !notif.read && markAsRead(notif.id)}
+                          onClick={() => handleNotificationClick(notif)}
                         >
                           <div className="flex items-start gap-3">
                             <span className="text-2xl">{getNotificationIcon(notif.type)}</span>
@@ -212,6 +244,17 @@ export default function CustomerNavbar() {
           </div>
         </div>
       </div>
+
+      {/* Order Details Modal */}
+      {showOrderModal && selectedOrder && (
+        <OrderDetailsModal
+          order={selectedOrder}
+          onClose={() => {
+            setShowOrderModal(false)
+            setSelectedOrder(null)
+          }}
+        />
+      )}
     </nav>
   )
 }

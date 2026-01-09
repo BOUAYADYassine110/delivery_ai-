@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { X, Loader, AlertCircle, CheckCircle, TrendingUp, Users, Package, DollarSign } from 'lucide-react';
+import { X, Loader, AlertCircle, CheckCircle, TrendingUp, Users, Package, DollarSign, Eye, Play } from 'lucide-react';
 import AdminNavbar from '../components/AdminNavbar';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -45,6 +47,7 @@ const createWarehouseIcon = () => {
 };
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [analytics, setAnalytics] = useState({});
@@ -56,6 +59,7 @@ const AdminDashboard = () => {
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   const [driverRecommendations, setDriverRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -94,12 +98,19 @@ const AdminDashboard = () => {
   };
 
   const handleAIReassign = async (orderId) => {
+    console.log('🤖 AI Reassign clicked for order:', orderId);
     setLoading(true);
     try {
+      console.log('Calling API:', `/api/admin/orders/${orderId}/auto-reassign`);
       const response = await api.autoReassignOrder(orderId);
-      showNotification(response.data.message, 'success');
+      console.log('AI Reassign response:', response.data);
+      const message = response.data.ai_reasoning 
+        ? `${response.data.message}\n\nAI Reasoning: ${response.data.ai_reasoning}`
+        : response.data.message;
+      showNotification(message, 'success');
       fetchData();
     } catch (error) {
+      console.error('AI Reassign error:', error);
       showNotification(error.response?.data?.detail || 'Failed to reassign order', 'error');
     } finally {
       setLoading(false);
@@ -511,6 +522,18 @@ const AdminDashboard = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => setSelectedOrderDetails(order)}
+                                className="bg-blue-500 text-white px-3 py-1 rounded-md text-xs font-medium hover:bg-blue-600 transition-colors flex items-center justify-center gap-1"
+                              >
+                                <Eye className="w-3 h-3" /> View
+                              </button>
+                              <button
+                                onClick={() => navigate(`/simulation/${order.id}`)}
+                                className="bg-green-500 text-white px-3 py-1 rounded-md text-xs font-medium hover:bg-green-600 transition-colors flex items-center justify-center gap-1"
+                              >
+                                <Play className="w-3 h-3" /> Simulate
+                              </button>
                               {order.status !== 'delivered' && order.status !== 'cancelled' && (
                                 <>
                                   <button
@@ -842,6 +865,13 @@ const AdminDashboard = () => {
           </div>
         )}
       </div>
+
+      {selectedOrderDetails && (
+        <OrderDetailsModal
+          order={selectedOrderDetails}
+          onClose={() => setSelectedOrderDetails(null)}
+        />
+      )}
     </div>
   );
 };

@@ -24,6 +24,69 @@ except ImportError:
 
 class AgentService:
     @staticmethod
+    async def recommend_driver(order: dict, drivers: list):
+        """Use AI agent to recommend best driver for order"""
+        try:
+            llm = LLM(model="ollama/llama3.2", base_url="http://localhost:11434")
+            
+            assignment_agent = Agent(
+                role="Driver Assignment Specialist",
+                goal="Select the optimal driver for delivery orders based on multiple factors",
+                backstory="Expert logistics coordinator with years of experience in driver assignment and route optimization",
+                llm=llm,
+                verbose=True
+            )
+            
+            driver_info = "\n".join([
+                f"- {d['name']}: {d['vehicle_type']}, rating {d['rating']}/5, status {d['status']}, "
+                f"city {d.get('assigned_city', 'Unknown')}, current orders: {len(d.get('current_orders', []))}"
+                for d in drivers[:10]
+            ])
+            
+            task = Task(
+                description=f"""Analyze and select the best driver for this delivery:
+                
+Order Details:
+- Pickup City: {order['pickup_city']}
+- Delivery City: {order['delivery_city']}
+- Weight: {order['weight']}kg
+- Service Type: {order.get('service_type', 'standard')}
+- Is Inter-City: {order.get('is_inter_city', False)}
+
+Available Drivers:
+{driver_info}
+
+Consider:
+1. Driver must be in pickup city
+2. Vehicle capacity for package weight
+3. Driver availability and current workload
+4. Driver rating and performance
+5. Service type requirements (express needs fast vehicle)
+
+Respond with ONLY the driver name, nothing else.""",
+                agent=assignment_agent,
+                expected_output="Driver name only"
+            )
+            
+            crew = Crew(agents=[assignment_agent], tasks=[task], verbose=True)
+            result = str(crew.kickoff()).strip()
+            
+            # Find driver by name in result
+            selected_driver = None
+            for driver in drivers:
+                if driver['name'].lower() in result.lower():
+                    selected_driver = driver
+                    break
+            
+            return {
+                "driver": selected_driver,
+                "ai_reasoning": result
+            }
+        except Exception as e:
+            print(f"AI Agent error: {e}")
+            return None
+    
+    @staticmethod
     async def calculate_price(weight: float, distance: float, service_type: str):
         try:
             llm = LLM(model="ollama/llama3.2", base_url="http://localhost:11434")
