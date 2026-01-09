@@ -3,6 +3,8 @@ import { api } from '../services/api';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { X, Loader, AlertCircle, CheckCircle, TrendingUp, Users, Package, DollarSign } from 'lucide-react';
+import AdminNavbar from '../components/AdminNavbar';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -52,6 +54,11 @@ const AdminDashboard = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [driverRecommendations, setDriverRecommendations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -77,6 +84,100 @@ const AdminDashboard = () => {
       setWarehouses(Array.isArray(warehousesRes.data) ? warehousesRes.data : []);
     } catch (error) {
       console.error('Error fetching admin data:', error);
+      showNotification('Error loading data', 'error');
+    }
+  };
+
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleAIReassign = async (orderId) => {
+    setLoading(true);
+    try {
+      const response = await api.autoReassignOrder(orderId);
+      showNotification(response.data.message, 'success');
+      fetchData();
+    } catch (error) {
+      showNotification(error.response?.data?.detail || 'Failed to reassign order', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleManualReassign = async (orderId) => {
+    setLoading(true);
+    try {
+      const response = await api.getDriverRecommendations(orderId);
+      setDriverRecommendations(response.data.recommendations);
+      setSelectedOrder(orderId);
+      setShowReassignModal(true);
+    } catch (error) {
+      showNotification('Failed to load driver recommendations', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmManualReassign = async (driverId) => {
+    setLoading(true);
+    try {
+      await api.manualReassignOrder(selectedOrder, {
+        order_id: selectedOrder,
+        new_driver_id: driverId,
+        reason: 'Manual admin reassignment'
+      });
+      showNotification('Order reassigned successfully', 'success');
+      setShowReassignModal(false);
+      fetchData();
+    } catch (error) {
+      showNotification('Failed to reassign order', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    if (!confirm('Are you sure you want to cancel this order?')) return;
+    setLoading(true);
+    try {
+      await api.cancelOrder(orderId, 'Admin cancellation');
+      showNotification('Order cancelled successfully', 'success');
+      fetchData();
+    } catch (error) {
+      showNotification('Failed to cancel order', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSuspendDriver = async (driverId, suspend) => {
+    const reason = suspend ? prompt('Enter suspension reason:') : '';
+    if (suspend && !reason) return;
+    setLoading(true);
+    try {
+      await api.suspendDriver(driverId, { suspend, reason });
+      showNotification(`Driver ${suspend ? 'suspended' : 'activated'} successfully`, 'success');
+      fetchData();
+    } catch (error) {
+      showNotification('Failed to update driver status', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateWarehouse = async (warehouseId, status) => {
+    setLoading(true);
+    try {
+      await api.updateWarehouse(warehouseId, { status });
+      showNotification('Warehouse updated successfully', 'success');
+      fetchData();
+      setShowWarehouseModal(false);
+    } catch (error) {
+      showNotification('Failed to update warehouse', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -97,92 +198,78 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Admin Dashboard</h1>
-            <p className="text-gray-600 mt-1">Multi-Agent Delivery System v3.0</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200">
-              <span className="text-xs text-gray-500">Last updated</span>
-              <p className="text-sm font-semibold text-gray-900">{new Date().toLocaleTimeString()}</p>
-            </div>
-            <button onClick={fetchData} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-sm transition-colors">
-              🔄 Refresh
-            </button>
+    <div className="min-h-screen bg-gray-50">
+      <AdminNavbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 animate-slide-in ${
+          notification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          {notification.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+          <span className="font-medium">{notification.message}</span>
+        </div>
+      )}
+
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg shadow-xl flex items-center gap-3">
+            <Loader className="animate-spin" size={24} />
+            <span className="font-medium">Processing...</span>
           </div>
         </div>
+      )}
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
-          <nav className="flex gap-1 p-2">
-            {['overview', 'live-map', 'warehouses', 'orders', 'drivers', 'analytics'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all ${
-                  activeTab === tab
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                {tab === 'overview' && '📊 Overview'}
-                {tab === 'live-map' && '🗺️ Live Map'}
-                {tab === 'warehouses' && `🏪 Warehouses (${Array.isArray(warehouses) ? warehouses.length : 0})`}
-                {tab === 'orders' && `📦 Orders (${orders.length})`}
-                {tab === 'drivers' && `🚗 Drivers (${drivers.length})`}
-                {tab === 'analytics' && '📈 Analytics'}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        <div>
+      <div>
           {activeTab === 'overview' && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white">
+                <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-transform">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-blue-100 text-sm font-medium">Total Orders</p>
                       <p className="text-4xl font-bold mt-2">{analytics.total_orders || 0}</p>
+                      <p className="text-blue-100 text-xs mt-1">All time</p>
                     </div>
                     <div className="bg-white/20 p-4 rounded-lg">
-                      <span className="text-3xl">📦</span>
+                      <Package size={32} />
                     </div>
                   </div>
                 </div>
-                <div className="bg-gradient-to-br from-yellow-500 to-orange-500 p-6 rounded-xl shadow-lg text-white">
+                <div className="bg-gradient-to-br from-yellow-500 to-orange-500 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-transform">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-yellow-100 text-sm font-medium">Pending</p>
                       <p className="text-4xl font-bold mt-2">{analytics.pending_orders || 0}</p>
+                      <p className="text-yellow-100 text-xs mt-1">Awaiting assignment</p>
                     </div>
                     <div className="bg-white/20 p-4 rounded-lg">
-                      <span className="text-3xl">⏳</span>
+                      <AlertCircle size={32} />
                     </div>
                   </div>
                 </div>
-                <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-xl shadow-lg text-white">
+                <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-transform">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-green-100 text-sm font-medium">Completed</p>
                       <p className="text-4xl font-bold mt-2">{analytics.completed || 0}</p>
+                      <p className="text-green-100 text-xs mt-1">Successfully delivered</p>
                     </div>
                     <div className="bg-white/20 p-4 rounded-lg">
-                      <span className="text-3xl">✅</span>
+                      <CheckCircle size={32} />
                     </div>
                   </div>
                 </div>
-                <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-6 rounded-xl shadow-lg text-white">
+                <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-transform">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-purple-100 text-sm font-medium">Active Drivers</p>
                       <p className="text-4xl font-bold mt-2">{analytics.active_drivers || 0}</p>
+                      <p className="text-purple-100 text-xs mt-1">Online now</p>
                     </div>
                     <div className="bg-white/20 p-4 rounded-lg">
-                      <span className="text-3xl">🚗</span>
+                      <Users size={32} />
                     </div>
                   </div>
                 </div>
@@ -361,68 +448,91 @@ const AdminDashboard = () => {
 
           {activeTab === 'orders' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200 bg-gray-50">
+                <h3 className="text-lg font-bold text-gray-900">📦 Order Management</h3>
+                <p className="text-sm text-gray-600 mt-1">Manage and reassign orders with AI assistance</p>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Driver</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Route</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {orders.map((order) => {
                       const driver = drivers.find(d => d.id === order.assigned_driver);
                       return (
-                        <tr key={order.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <tr key={order.id} className="hover:bg-blue-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <div>
-                              <div className="font-medium">{order.tracking_number || order.id}</div>
+                              <div className="font-medium text-gray-900">{order.tracking_number || order.id.slice(0, 8)}</div>
                               <div className="text-xs text-gray-500">{order.package_description}</div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <div>
-                              <div className="font-medium">{order.sender_name}</div>
+                              <div className="font-medium text-gray-900">{order.sender_name}</div>
                               <div className="text-xs text-gray-500">{order.sender_phone}</div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(order.status)}`}>
+                            <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
                               {order.status.replace('_', ' ')}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <div>
-                              <div className="font-medium">{driver ? driver.name : 'Unassigned'}</div>
-                              {driver && (
-                                <div className="text-xs text-gray-500">
-                                  {driver.vehicle_type} • {driver.phone}
-                                </div>
-                              )}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            {driver ? (
+                              <div>
+                                <div className="font-medium text-gray-900">{driver.name}</div>
+                                <div className="text-xs text-gray-500">{driver.vehicle_type} • ⭐ {driver.rating}</div>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 italic">Unassigned</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            <div className="max-w-xs">
+                              <div className="font-medium">{order.pickup_city} → {order.delivery_city}</div>
+                              <div className="text-xs truncate">{order.pickup_address}</div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <div>
-                              <div>{order.pickup_city} → {order.delivery_city}</div>
-                              <div className="text-xs">{order.pickup_address}</div>
-                              <div className="text-xs">→ {order.delivery_address}</div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <div>
-                              <div className="font-medium">{order.total_cost || order.price} MAD</div>
+                              <div className="font-bold text-gray-900">{order.total_cost || order.price} MAD</div>
                               <div className="text-xs text-gray-500">{order.service_type}</div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <div>
-                              <div>{new Date(order.created_at).toLocaleDateString()}</div>
-                              <div className="text-xs">{new Date(order.created_at).toLocaleTimeString()}</div>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <div className="flex flex-col gap-1">
+                              {order.status !== 'delivered' && order.status !== 'cancelled' && (
+                                <>
+                                  <button
+                                    onClick={() => handleAIReassign(order.id)}
+                                    className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-3 py-1 rounded-md text-xs font-medium hover:from-purple-600 hover:to-indigo-700 transition-all shadow-sm"
+                                  >
+                                    🤖 AI Reassign
+                                  </button>
+                                  <button
+                                    onClick={() => handleManualReassign(order.id)}
+                                    className="bg-blue-500 text-white px-3 py-1 rounded-md text-xs font-medium hover:bg-blue-600 transition-colors"
+                                  >
+                                    👤 Manual
+                                  </button>
+                                  <button
+                                    onClick={() => handleCancelOrder(order.id)}
+                                    className="bg-red-500 text-white px-3 py-1 rounded-md text-xs font-medium hover:bg-red-600 transition-colors"
+                                  >
+                                    ✕ Cancel
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -436,6 +546,10 @@ const AdminDashboard = () => {
 
           {activeTab === 'drivers' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200 bg-gray-50">
+                <h3 className="text-lg font-bold text-gray-900">🚗 Driver Management</h3>
+                <p className="text-sm text-gray-600 mt-1">Monitor and manage driver fleet</p>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
@@ -444,14 +558,14 @@ const AdminDashboard = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">City</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Orders</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Orders</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Deliveries</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {drivers.map((driver) => (
-                      <tr key={driver.id} className="hover:bg-gray-50">
+                      <tr key={driver.id} className="hover:bg-blue-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
                             <div className="text-sm font-medium text-gray-900">{driver.name}</div>
@@ -459,7 +573,7 @@ const AdminDashboard = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(driver.status)}`}>
+                          <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(driver.status)}`}>
                             {driver.status}
                           </span>
                         </td>
@@ -469,14 +583,33 @@ const AdminDashboard = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {driver.assigned_city}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {driver.current_orders?.length || 0}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {driver.current_orders?.length || 0} active
+                          </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          ⭐ {driver.rating}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <div className="flex items-center">
+                            <span className="text-yellow-400">⭐</span>
+                            <span className="ml-1 font-medium text-gray-900">{driver.rating}</span>
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {driver.total_deliveries}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {driver.status !== 'suspended' ? (
+                            <button
+                              onClick={() => handleSuspendDriver(driver.id, true)}
+                              className="bg-red-500 text-white px-3 py-1 rounded-md text-xs font-medium hover:bg-red-600 transition-colors"
+                            >
+                              🚫 Suspend
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleSuspendDriver(driver.id, false)}
+                              className="bg-green-500 text-white px-3 py-1 rounded-md text-xs font-medium hover:bg-green-600 transition-colors"
+                            >
+                              ✅ Activate
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -531,65 +664,176 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        {/* Warehouse Management Modal */}
-        {showWarehouseModal && selectedWarehouse && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-200">
+        {/* Driver Reassignment Modal */}
+        {showReassignModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-indigo-600">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-xl font-bold text-gray-900">🏪 {selectedWarehouse.name}</h3>
-                  <button onClick={() => setShowWarehouseModal(false)} className="text-gray-400 hover:text-gray-600">
-                    <span className="text-2xl">×</span>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">👤 Select Driver for Reassignment</h3>
+                    <p className="text-blue-100 text-sm mt-1">AI-powered recommendations sorted by score</p>
+                  </div>
+                  <button onClick={() => setShowReassignModal(false)} className="text-white hover:text-gray-200 transition-colors">
+                    <X size={24} />
                   </button>
                 </div>
               </div>
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">City</label>
-                    <p className="text-gray-900 font-semibold">{selectedWarehouse.city}</p>
+              <div className="p-6">
+                {driverRecommendations.length > 0 ? (
+                  <div className="space-y-3">
+                    {driverRecommendations.map((rec, index) => (
+                      <div key={rec.driver_id} className={`border-2 rounded-lg p-4 transition-all hover:shadow-md ${
+                        index === 0 ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-blue-300'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
+                              index === 0 ? 'bg-green-500 text-white' :
+                              index === 1 ? 'bg-blue-500 text-white' :
+                              index === 2 ? 'bg-purple-500 text-white' :
+                              'bg-gray-300 text-gray-700'
+                            }`}>
+                              #{index + 1}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-gray-900">{rec.name}</h4>
+                                {index === 0 && <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full font-medium">Best Match</span>}
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
+                                <span>🚗 {rec.vehicle_type}</span>
+                                <span>⭐ {rec.rating}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  rec.status === 'available' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {rec.status}
+                                </span>
+                                <span>{rec.current_orders} orders</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <div className="text-2xl font-bold text-blue-600">{rec.score}</div>
+                              <div className="text-xs text-gray-500">AI Score</div>
+                            </div>
+                            <button
+                              onClick={() => confirmManualReassign(rec.driver_id)}
+                              disabled={!rec.available}
+                              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                rec.available
+                                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
+                                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              }`}
+                            >
+                              {rec.available ? 'Assign' : 'Busy'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Loader className="animate-spin mx-auto mb-4" size={48} />
+                    <p className="text-gray-500">Loading driver recommendations...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Warehouse Management Modal */}
+        {showWarehouseModal && selectedWarehouse && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-indigo-600">
+                <div className="flex justify-between items-center">
                   <div>
+                    <h3 className="text-xl font-bold text-white">🏪 {selectedWarehouse.name}</h3>
+                    <p className="text-purple-100 text-sm mt-1">{selectedWarehouse.city}</p>
+                  </div>
+                  <button onClick={() => setShowWarehouseModal(false)} className="text-white hover:text-gray-200 transition-colors">
+                    <X size={24} />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <label className="text-sm font-medium text-gray-700">City</label>
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{selectedWarehouse.city}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
                     <label className="text-sm font-medium text-gray-700">Status</label>
-                    <p className={`font-semibold ${selectedWarehouse.status === 'operational' ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-lg font-semibold mt-1 ${
+                      selectedWarehouse.status === 'operational' ? 'text-green-600' : 'text-red-600'
+                    }`}>
                       {selectedWarehouse.status}
                     </p>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 bg-gray-50 p-4 rounded-lg">
                     <label className="text-sm font-medium text-gray-700">Address</label>
-                    <p className="text-gray-900">{selectedWarehouse.address}</p>
+                    <p className="text-gray-900 mt-1">{selectedWarehouse.address}</p>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Current Packages</label>
-                    <p className="text-gray-900 font-semibold">{selectedWarehouse.current_packages || 0}</p>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <label className="text-sm font-medium text-blue-700">Current Packages</label>
+                    <p className="text-2xl font-bold text-blue-900 mt-1">{selectedWarehouse.current_packages || 0}</p>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Capacity</label>
-                    <p className="text-gray-900 font-semibold">{selectedWarehouse.capacity}</p>
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <label className="text-sm font-medium text-purple-700">Capacity</label>
+                    <p className="text-2xl font-bold text-purple-900 mt-1">{selectedWarehouse.capacity}</p>
                   </div>
-                  <div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
                     <label className="text-sm font-medium text-gray-700">Manager</label>
-                    <p className="text-gray-900">{selectedWarehouse.manager || 'N/A'}</p>
+                    <p className="text-gray-900 mt-1">{selectedWarehouse.manager || 'N/A'}</p>
                   </div>
-                  <div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
                     <label className="text-sm font-medium text-gray-700">Phone</label>
-                    <p className="text-gray-900">{selectedWarehouse.phone || 'N/A'}</p>
+                    <p className="text-gray-900 mt-1">{selectedWarehouse.phone || 'N/A'}</p>
                   </div>
                 </div>
+                
+                {/* Utilization Bar */}
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="font-medium text-gray-700">Utilization</span>
+                    <span className="font-bold text-gray-900">
+                      {((selectedWarehouse.current_packages / selectedWarehouse.capacity) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className={`h-3 rounded-full transition-all ${
+                        (selectedWarehouse.current_packages / selectedWarehouse.capacity) > 0.8 ? 'bg-red-500' : 
+                        (selectedWarehouse.current_packages / selectedWarehouse.capacity) > 0.5 ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${(selectedWarehouse.current_packages / selectedWarehouse.capacity) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t border-gray-200">
-                  <h4 className="font-semibold text-gray-900 mb-3">Quick Actions</h4>
+                  <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <TrendingUp size={20} />
+                    Quick Actions
+                  </h4>
                   <div className="grid grid-cols-2 gap-3">
-                    <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                      Mark Operational
+                    <button 
+                      onClick={() => handleUpdateWarehouse(selectedWarehouse.id, 'operational')}
+                      disabled={selectedWarehouse.status === 'operational'}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors shadow-md hover:shadow-lg"
+                    >
+                      ✅ Mark Operational
                     </button>
-                    <button className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                      Mark Closed
-                    </button>
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                      View Packages
-                    </button>
-                    <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                      Edit Details
+                    <button 
+                      onClick={() => handleUpdateWarehouse(selectedWarehouse.id, 'closed')}
+                      disabled={selectedWarehouse.status === 'closed'}
+                      className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors shadow-md hover:shadow-lg"
+                    >
+                      🚫 Mark Closed
                     </button>
                   </div>
                 </div>

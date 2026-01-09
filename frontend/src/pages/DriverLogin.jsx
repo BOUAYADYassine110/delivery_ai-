@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
 const DriverLogin = () => {
@@ -7,6 +8,7 @@ const DriverLogin = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -15,14 +17,8 @@ const DriverLogin = () => {
 
     try {
       const response = await api.driverLogin(credentials);
-      const authData = {
-        token: response.data.access_token,
-        driver: response.data.driver,
-        expiry: Date.now() + (24 * 60 * 60 * 1000)
-      }
-      localStorage.setItem('driver_auth', JSON.stringify(authData));
-      localStorage.setItem('driver_id', response.data.driver.id);
-      window.location.href = '/driver/dashboard';
+      login(response.data.driver, response.data.access_token, 'driver');
+      navigate('/driver/dashboard');
     } catch (error) {
       setError('Invalid driver credentials');
     } finally {

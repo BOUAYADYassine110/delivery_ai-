@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
 const AdminLogin = () => {
@@ -7,6 +8,7 @@ const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -15,13 +17,7 @@ const AdminLogin = () => {
 
     try {
       const response = await api.adminLogin(credentials);
-      const authData = {
-        token: response.data.access_token,
-        user: response.data.admin,
-        expiry: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
-      };
-      localStorage.setItem('admin_auth', JSON.stringify(authData));
-      localStorage.setItem('admin_token', response.data.access_token);
+      login(response.data.admin, response.data.access_token, 'admin');
       navigate('/admin/dashboard');
     } catch (error) {
       setError('Invalid admin credentials');

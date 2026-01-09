@@ -4,6 +4,10 @@ Storage Layer - Switches between in-memory and MongoDB
 import os
 import sys
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Fix encoding for Windows
 if sys.platform == 'win32':

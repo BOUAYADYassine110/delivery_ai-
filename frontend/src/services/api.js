@@ -76,6 +76,19 @@ export const api = {
   getAdminDrivers: () => axios.get(`${API_BASE}/admin/drivers`),
   getAdminAnalytics: () => axios.get(`${API_BASE}/admin/analytics`),
   
+  // Admin - Order Management
+  getDriverRecommendations: (orderId) => axios.get(`${API_BASE}/admin/orders/${orderId}/driver-recommendations`),
+  autoReassignOrder: (orderId) => axios.post(`${API_BASE}/admin/orders/${orderId}/auto-reassign`),
+  manualReassignOrder: (orderId, data) => axios.post(`${API_BASE}/admin/orders/${orderId}/reassign`, data),
+  cancelOrder: (orderId, reason) => axios.post(`${API_BASE}/admin/orders/${orderId}/cancel`, { reason }),
+  
+  // Admin - Warehouse Management
+  getWarehouseStatus: (warehouseId) => axios.get(`${API_BASE}/admin/warehouses/${warehouseId}/status`),
+  updateWarehouse: (warehouseId, data) => axios.post(`${API_BASE}/admin/warehouses/${warehouseId}/update`, data),
+  
+  // Admin - Driver Management
+  suspendDriver: (driverId, data) => axios.post(`${API_BASE}/admin/drivers/${driverId}/suspend`, data),
+  
   // Enhanced tracking
   getWeather: (city) => axios.get(`${API_BASE}/weather/${city}`),
   getRouteInfo: (pickupCity, deliveryCity) => axios.get(`${API_BASE}/route/${pickupCity}/${deliveryCity}`),
@@ -83,8 +96,7 @@ export const api = {
   // Enhanced Admin Features
   getLiveMap: () => axios.get(`${API_BASE}/admin/live-map`),
   getAdvancedAnalytics: () => axios.get(`${API_BASE}/admin/analytics/advanced`),
-  suspendDriver: (driverId, data) => axios.post(`${API_BASE}/admin/driver/${driverId}/suspend`, data),
-  getEmergencies: () => axios.get(`${API_BASE}/admin/emergencies`),
+  getSystemAlerts: () => axios.get(`${API_BASE}/admin/alerts`),
   
   // Enhanced Driver Features
   updateDriverStatus: (data) => axios.post(`${API_BASE}/driver/status/update`, data),

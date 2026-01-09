@@ -1,5 +1,30 @@
 // Form validation utilities
 
+// Individual validation functions
+export const validatePhone = (value) => {
+  const phoneRegex = /^\+212[5-7]\d{8}$/
+  return phoneRegex.test(value)
+}
+
+export const validateEmail = (value) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(value)
+}
+
+export const validateWeight = (value) => {
+  const num = parseFloat(value)
+  return !isNaN(num) && num > 0 && num <= 1000
+}
+
+export const validateAddress = (value) => {
+  return value && value.trim().length >= 10
+}
+
+export const validateDimensions = (length, width, height) => {
+  return length > 0 && width > 0 && height > 0
+}
+
+// Validators object for form validation (returns error messages)
 export const validators = {
   // Phone number validation (Moroccan format)
   phone: (value) => {

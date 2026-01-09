@@ -1,9 +1,10 @@
 # 🚀 Multi-Agent Delivery System v3.0
 
-An advanced AI-powered delivery management system with **16 drivers** across 6 Moroccan cities, featuring intelligent assignment algorithms, real-time tracking, and interactive delivery simulation.
+An advanced AI-powered delivery management system with **16 drivers** across 6 Moroccan cities, featuring intelligent assignment algorithms, real-time tracking, interactive delivery simulation, and **AI-powered pricing**.
 
 ## ✨ Key Features
 
+- **🤖 AI-Powered Pricing**: Intelligent price calculation using CrewAI agents
 - **🎯 Multi-Driver Intelligence**: 16 drivers with AI-powered assignment across 6 cities
 - **⚡ Auto-Accept Intra-City**: Instant assignment for same-city deliveries
 - **🏙️ Strict City Matching**: Drivers only accept orders in their assigned city
@@ -19,7 +20,31 @@ An advanced AI-powered delivery management system with **16 drivers** across 6 M
 - **🔔 Real-time Notifications**: Live updates for orders and deliveries
 - **✅ Input Validation**: Smart form validation with auto-formatting
 - **🛡️ Error Handling**: Comprehensive error boundaries and recovery
-- **🔌 WebSocket Support**: Real-time order and driver tracking
+- **✨ Modern UI**: Gradient designs, smooth animations, and intuitive interfaces
+
+## 🤖 AI-Powered Pricing
+
+### Intelligent Price Calculation
+- **CrewAI Integration**: Uses AI agents for dynamic pricing
+- **Multi-Factor Analysis**: Considers weight, distance, service type, and delivery type
+- **Automatic Fallback**: Seamlessly falls back to formula-based pricing if AI unavailable
+- **Transparent Pricing**: Shows pricing method (AI Agent, Formula, or Fallback)
+- **Real-time Calculation**: Instant price updates as you fill the order form
+
+### Pricing Features
+- ✨ **AI Badge**: Visual indicator when AI pricing is used
+- 📊 **Price Breakdown**: Detailed cost breakdown with all fees
+- 🔄 **Live Updates**: Prices recalculate automatically on form changes
+- 💡 **Smart Adjustments**: AI considers intra-city vs inter-city differences
+- 📈 **Metadata Tracking**: Stores pricing method and AI analysis with each order
+
+### How It Works
+1. User enters order details (weight, dimensions, cities)
+2. Frontend calls AI pricing service
+3. Backend AI agent calculates intelligent price
+4. Additional fees added (warehouse, insurance, fragile)
+5. Price displayed with AI-powered badge
+6. Order created with pricing metadata
 
 ## 🏙️ City Coverage (16 Drivers)
 
@@ -177,11 +202,12 @@ Our intelligent assignment system uses **5 key factors**:
 
 ### Customer Dashboard
 - Create intra-city & inter-city orders
+- **AI-powered pricing calculator**
 - Real-time package tracking
 - Order history and management
-- Pricing calculator
 - Interactive delivery simulation
 - Map-based address selection
+- **Modern order details modal**
 
 ### Driver Dashboard
 - Multi-package route optimization
@@ -199,28 +225,32 @@ Our intelligent assignment system uses **5 key factors**:
 ## 🛠️ Technical Architecture
 
 ### Backend (FastAPI)
+- **AI Pricing Agent**: CrewAI-powered intelligent pricing
 - **AI Assignment Engine**: Multi-factor driver selection
-- **Real-time Tracking**: WebSocket connections
+- **Real-time Tracking**: Live order and driver updates
 - **Route Optimization**: TSP algorithms
 - **Weather Integration**: Open-Meteo API
 - **Database**: In-memory storage (MongoDB ready)
 - **OSRM Integration**: Real road routing without API keys
+- **Pricing Fallback**: 3-tier pricing system (AI → Formula → Client-side)
 
 ### Frontend (React + Vite)
+- **AI Pricing Service**: Centralized pricing calculations
 - **Interactive Maps**: Leaflet.js with OpenStreetMap
-- **Real-time Updates**: WebSocket integration ready
+- **Modern UI Components**: Gradient designs and smooth animations
 - **Route Visualization**: Turn-by-turn navigation
 - **Responsive Design**: Mobile-friendly interface
 - **Map Picker**: Interactive location selection
 - **Notifications**: Real-time notification center
 - **Input Validation**: Smart form validation utilities
 - **Error Boundaries**: Comprehensive error handling
+- **Order Details Modal**: Modern popup with status-specific styling
 
-### AI Agents (Optional - CrewAI)
+### AI Agents (CrewAI)
+- **Pricing Agent**: Dynamic cost calculation with intelligent adjustments
 - **Assignment Agent**: Intelligent driver selection
 - **Routing Agent**: Optimal path calculation
 - **Tracking Agent**: Real-time monitoring
-- **Pricing Agent**: Dynamic cost calculation
 
 ## 📊 System Capabilities
 
@@ -267,20 +297,30 @@ OLLAMA_MODEL=llama3.2
 
 ## 🚀 Advanced Features
 
+### AI & Intelligence
+- **AI-Powered Pricing**: CrewAI agents for intelligent cost calculation
 - **Multi-Package Batching**: Optimize multiple deliveries
 - **Weather-Aware Routing**: Adapt to conditions
 - **Specialty Matching**: Right driver for the job
 - **Real-time Analytics**: Live system monitoring
 - **Cross-City Assignment**: Intelligent fallbacks
+
+### User Experience
 - **Interactive Simulation**: Visual delivery tracking
 - **Map-Based Selection**: Precise location picking
+- **Modern UI**: Gradient designs with smooth animations
+- **Order Details Modal**: Beautiful popup with status-specific styling
+- **AI Pricing Badge**: Visual indicator for AI-calculated prices
+- **Real-time Updates**: Live price and status updates
+
+### Technical
 - **Coordinate Persistence**: Consistent location data
 - **OSRM Integration**: Real road routing
 - **Multi-Phase Workflow**: Complete inter-city visualization
 - **Notification System**: Real-time updates with unread badges
 - **Form Validation**: Auto-formatting phone numbers and addresses
 - **Error Recovery**: Automatic error boundaries with reload
-- **WebSocket Ready**: Real-time tracking infrastructure
+- **Pricing Metadata**: Track pricing method and AI analysis
 
 ## 📁 Project Structure
 
@@ -290,29 +330,33 @@ delivery_ai-/
 │   ├── api/
 │   │   ├── routes/          # API endpoints
 │   │   ├── services/        # Business logic
+│   │   │   ├── agent_service.py      # CrewAI agents
+│   │   │   ├── smart_assignment.py   # Driver assignment
+│   │   │   └── delivery_simulator.py # Simulation engine
 │   │   ├── models/          # Data models
 │   │   └── schemas/         # Pydantic schemas
 │   ├── main.py             # FastAPI application
+│   ├── ai_pricing.py       # AI pricing integration
 │   ├── auth.py             # Authentication
-│   ├── config.py           # Configuration
-│   ├── .env.example        # Environment template
-│   ├── USE_MONGODB.md      # MongoDB integration guide
+│   ├── storage.py          # Data storage layer
 │   └── requirements.txt    # Python dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── components/     # React components
-│   │   │   ├── NotificationCenter.jsx  # Notification system
-│   │   │   ├── ErrorBoundary.jsx       # Error handling
-│   │   │   └── Loading.jsx             # Loading states
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API services
+│   │   ├── components/
+│   │   │   ├── OrderDetailsModal.jsx  # Modern order popup
+│   │   │   ├── NotificationCenter.jsx # Notifications
+│   │   │   └── ErrorBoundary.jsx      # Error handling
+│   │   ├── pages/
+│   │   │   ├── CreateOrder.jsx        # Order creation with AI pricing
+│   │   │   ├── PricingCalculator.jsx  # AI pricing calculator
+│   │   │   └── CustomerDashboard.jsx  # Customer interface
+│   │   ├── services/
+│   │   │   ├── pricingService.js      # AI pricing service
+│   │   │   └── api.js                 # API wrapper
 │   │   ├── utils/          # Utilities
-│   │   │   ├── validation.js    # Form validation
-│   │   │   └── useWebSocket.js  # WebSocket hooks
 │   │   └── App.jsx         # Main app
 │   ├── package.json        # Node dependencies
 │   └── vite.config.js      # Vite configuration
-├── INTEGRATION_COMPLETE.md # Integration status
 └── README.md               # This file
 ```
 
@@ -326,6 +370,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**Built with**: FastAPI, React, MongoDB, CrewAI, Leaflet.js, WebSockets, OSRM
+**Built with**: FastAPI, React, CrewAI, Leaflet.js, OSRM, Tailwind CSS
 
-**Version**: 3.0 | **Status**: Production Ready | **Coverage**: 6 Cities, 16 Drivers
+**Version**: 3.0 | **Status**: Production Ready | **Coverage**: 6 Cities, 16 Drivers | **AI-Powered**: ✨

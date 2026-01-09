@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Mail, Lock, Package, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
   const navigate = useNavigate()
+  const { login, getDashboardRoute } = useAuth()
   const [formData, setFormData] = useState({ username: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -23,14 +25,11 @@ export default function Login() {
 
       if (response.ok) {
         const data = await response.json()
-        const authData = {
-          access_token: data.access_token,
-          token: data.access_token,
-          user: data.user,
-          expiry: Date.now() + (24 * 60 * 60 * 1000)
-        }
-        localStorage.setItem('auth', JSON.stringify(authData))
-        window.location.href = '/dashboard'
+        // Map 'client' role to 'customer' for frontend consistency
+        const role = data.user?.role === 'client' ? 'customer' : (data.user?.role || 'customer')
+        const userData = { ...data.user, role }
+        login(userData, data.access_token, role)
+        navigate(getDashboardRoute(role))
       } else {
         const error = await response.json().catch(() => ({}))
         setError(error.detail || 'Invalid credentials')

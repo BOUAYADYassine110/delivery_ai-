@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import LiveGPSTracker from '../components/LiveGPSTracker';
 import AdvancedRouteDisplay from '../components/RouteMapDisplay';
 import MultiPackageManager from '../components/MultiPackageManager';
+import DriverNavbar from '../components/DriverNavbar';
 
 const DriverDashboard = () => {
   const [driver, setDriver] = useState(null);
@@ -273,8 +274,9 @@ const DriverDashboard = () => {
   };
   
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      <DriverNavbar />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Enhanced Driver Header */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="flex justify-between items-center">

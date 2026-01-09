@@ -203,9 +203,9 @@ def get_order_details(order_id: str, current_admin: dict = Depends(get_current_a
     return {"order": order, "driver": driver_info}
 
 @router.post("/orders/{order_id}/reassign")
-def reassign_order(order_id: str, data: OrderReassign, current_admin: dict = Depends(get_current_admin)):
+async def reassign_order(order_id: str, data: OrderReassign, current_admin: dict = Depends(get_current_admin)):
     """Manually reassign order to different driver"""
-    from main import orders_db, drivers_db
+    from main import orders_db, drivers_db, storage
     
     order = next((o for o in orders_db if o["id"] == order_id), None)
     if not order:
@@ -222,6 +222,7 @@ def reassign_order(order_id: str, data: OrderReassign, current_admin: dict = Dep
             old_driver["current_orders"].remove(order_id)
             if not old_driver["current_orders"]:
                 old_driver["status"] = "available"
+            storage.update_driver(old_driver["id"], old_driver)
     
     # Assign to new driver
     order["assigned_driver"] = data.new_driver_id
@@ -233,12 +234,15 @@ def reassign_order(order_id: str, data: OrderReassign, current_admin: dict = Dep
         new_driver["current_orders"].append(order_id)
     new_driver["status"] = "busy"
     
+    storage.update_order(order_id, order)
+    storage.update_driver(new_driver["id"], new_driver)
+    
     return {"success": True, "message": f"Order reassigned to {new_driver['name']}"}
 
 @router.post("/orders/{order_id}/cancel")
 def cancel_order(order_id: str, reason: str = "", current_admin: dict = Depends(get_current_admin)):
     """Cancel an order"""
-    from main import orders_db, drivers_db
+    from main import orders_db, drivers_db, storage
     
     order = next((o for o in orders_db if o["id"] == order_id), None)
     if not order:
@@ -251,11 +255,14 @@ def cancel_order(order_id: str, reason: str = "", current_admin: dict = Depends(
             driver["current_orders"].remove(order_id)
             if not driver["current_orders"]:
                 driver["status"] = "available"
+            storage.update_driver(driver["id"], driver)
     
     order["status"] = "cancelled"
     order["cancelled_at"] = datetime.now().isoformat()
     order["cancel_reason"] = reason
     order["cancelled_by"] = "admin"
+    
+    storage.update_order(order_id, order)
     
     return {"success": True, "message": "Order cancelled"}
 
@@ -331,7 +338,7 @@ def get_driver_details(driver_id: str, current_admin: dict = Depends(get_current
 @router.post("/drivers/{driver_id}/suspend")
 def suspend_driver(driver_id: str, data: DriverSuspend, current_admin: dict = Depends(get_current_admin)):
     """Suspend or activate driver"""
-    from main import drivers_db
+    from main import drivers_db, storage
     
     driver = next((d for d in drivers_db if d["id"] == driver_id), None)
     if not driver:
@@ -345,6 +352,8 @@ def suspend_driver(driver_id: str, data: DriverSuspend, current_admin: dict = De
         driver["status"] = "available"
         driver["suspension_reason"] = None
         driver["suspended_at"] = None
+    
+    storage.update_driver(driver_id, driver)
     
     return {"success": True, "message": f"Driver {'suspended' if data.suspend else 'activated'}"}
 
@@ -501,6 +510,156 @@ def get_advanced_analytics(current_admin: dict = Depends(get_current_admin)):
         "driver_performance": driver_performance,
         "fleet_status": fleet_status
     }
+
+# ============= AI-POWERED ASSIGNMENT =============
+@router.get("/orders/{order_id}/driver-recommendations")
+async def get_driver_recommendations(order_id: str, current_admin: dict = Depends(get_current_admin)):
+    """Get AI-powered driver recommendations for order"""
+    from main import orders_db, drivers_db, assign_best_driver, calculate_ultimate_driver_score, get_city_coordinates
+    
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    pickup_coords = get_city_coordinates(order["pickup_city"])
+    
+    # Get all available drivers in city
+    city_drivers = [d for d in drivers_db if 
+                   d["assigned_city"].lower() == order["pickup_city"].lower() and
+                   d["status"] in ["available", "busy"]]
+    
+    # Score each driver
+    recommendations = []
+    for driver in city_drivers:
+        score = calculate_ultimate_driver_score(driver, order, pickup_coords)
+        recommendations.append({
+            "driver_id": driver["id"],
+            "name": driver["name"],
+            "vehicle_type": driver["vehicle_type"],
+            "rating": driver["rating"],
+            "status": driver["status"],
+            "current_orders": len(driver["current_orders"]),
+            "score": round(score, 2),
+            "available": driver["status"] == "available"
+        })
+    
+    # Sort by score
+    recommendations.sort(key=lambda x: x["score"], reverse=True)
+    
+    return {
+        "order_id": order_id,
+        "recommendations": recommendations[:5],
+        "total_drivers": len(recommendations)
+    }
+
+@router.post("/orders/{order_id}/auto-reassign")
+async def auto_reassign_order(order_id: str, current_admin: dict = Depends(get_current_admin)):
+    """Use AI to automatically reassign order to best driver"""
+    from main import orders_db, drivers_db, assign_best_driver, storage
+    
+    order = next((o for o in orders_db if o["id"] == order_id), None)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Get current driver to exclude
+    excluded = [order["assigned_driver"]] if order.get("assigned_driver") else []
+    
+    # Use AI assignment
+    best_driver = assign_best_driver(order, excluded_drivers=excluded)
+    
+    if not best_driver:
+        raise HTTPException(status_code=404, detail="No suitable driver found")
+    
+    # Remove from old driver
+    if order.get("assigned_driver"):
+        old_driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
+        if old_driver and order_id in old_driver["current_orders"]:
+            old_driver["current_orders"].remove(order_id)
+            if not old_driver["current_orders"]:
+                old_driver["status"] = "available"
+            storage.update_driver(old_driver["id"], old_driver)
+    
+    # Assign to new driver
+    order["assigned_driver"] = best_driver["id"]
+    order["status"] = "assigned"
+    order["reassigned_at"] = datetime.now().isoformat()
+    order["reassign_reason"] = "AI auto-reassignment"
+    
+    if order_id not in best_driver["current_orders"]:
+        best_driver["current_orders"].append(order_id)
+    best_driver["status"] = "busy"
+    
+    storage.update_order(order_id, order)
+    storage.update_driver(best_driver["id"], best_driver)
+    
+    return {
+        "success": True,
+        "message": f"Order auto-reassigned to {best_driver['name']}",
+        "driver": {
+            "id": best_driver["id"],
+            "name": best_driver["name"],
+            "vehicle_type": best_driver["vehicle_type"],
+            "rating": best_driver["rating"]
+        }
+    }
+
+# ============= WAREHOUSE MANAGEMENT =============
+@router.get("/warehouses/{warehouse_id}/status")
+async def get_warehouse_status(warehouse_id: str, current_admin: dict = Depends(get_current_admin)):
+    """Get detailed warehouse status with AI insights"""
+    from main import warehouses_db, orders_db
+    try:
+        from backend.api.services.warehouse_agent import check_warehouse_capacity, predict_warehouse_capacity
+        agent_available = True
+    except:
+        agent_available = False
+    
+    warehouse = next((w for w in warehouses_db if w["id"] == warehouse_id), None)
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    
+    # Get packages in warehouse
+    warehouse_packages = [o for o in orders_db if 
+                         o.get("current_warehouse") == warehouse_id or
+                         (o["status"] == "at_origin_warehouse" and o["pickup_city"] == warehouse["city"])]
+    
+    result = {
+        "warehouse": warehouse,
+        "packages": warehouse_packages,
+        "package_count": len(warehouse_packages),
+        "utilization": round((warehouse["current_packages"] / warehouse["capacity"]) * 100, 1)
+    }
+    
+    # Add AI insights if available
+    if agent_available:
+        capacity_check = await check_warehouse_capacity(warehouse_id, warehouses_db, 0)
+        prediction = await predict_warehouse_capacity(warehouse_id, warehouses_db, {})
+        result["ai_insights"] = {
+            "capacity_status": capacity_check,
+            "prediction": prediction
+        }
+    
+    return result
+
+@router.post("/warehouses/{warehouse_id}/update")
+async def update_warehouse(warehouse_id: str, update_data: dict, current_admin: dict = Depends(get_current_admin)):
+    """Update warehouse details"""
+    from main import warehouses_db, storage
+    
+    warehouse = next((w for w in warehouses_db if w["id"] == warehouse_id), None)
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    
+    # Update allowed fields
+    allowed_fields = ["status", "manager", "phone", "capacity"]
+    for field in allowed_fields:
+        if field in update_data:
+            warehouse[field] = update_data[field]
+    
+    warehouse["updated_at"] = datetime.now().isoformat()
+    storage.update_warehouse(warehouse_id, warehouse)
+    
+    return {"success": True, "warehouse": warehouse}
 
 # ============= ALERTS =============
 @router.get("/alerts")

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, MapPin, User, Phone, Weight, Box, Truck, Warehouse, DollarSign } from 'lucide-react'
+import { Package, MapPin, User, Phone, Weight, Box, Truck, Warehouse, DollarSign, Sparkles } from 'lucide-react'
 import MapPicker from '../components/MapPicker'
 import AIProcessingModal from '../components/AIProcessingModal'
+import CustomerNavbar from '../components/CustomerNavbar'
+import pricingService from '../services/pricingService'
 
 export default function CreateOrder() {
   const navigate = useNavigate()
@@ -11,6 +13,8 @@ export default function CreateOrder() {
   const [showPickupMap, setShowPickupMap] = useState(false)
   const [showDeliveryMap, setShowDeliveryMap] = useState(false)
   const [priceEstimate, setPriceEstimate] = useState(null)
+  const [aiPowered, setAiPowered] = useState(false)
+  const [calculatingPrice, setCalculatingPrice] = useState(false)
   const [formData, setFormData] = useState({
     sender_name: '',
     sender_phone: '',
@@ -53,7 +57,7 @@ export default function CreateOrder() {
     }
   }, [])
 
-  // Calculate price estimate
+  // Calculate price estimate with AI
   useEffect(() => {
     if (formData.weight && formData.length && formData.width && formData.height) {
       calculatePrice()
@@ -62,31 +66,66 @@ export default function CreateOrder() {
       formData.pickup_option, formData.delivery_option, formData.fragile, formData.insurance_value])
 
   const calculatePrice = async () => {
-    const basePrice = isInterCity ? 80 : 25
+    setCalculatingPrice(true)
     const weight = parseFloat(formData.weight) || 1
-    const weightCost = isInterCity ? weight * 8 : weight * 3
     
-    let warehouseFee = 0
-    if (isInterCity) {
-      if (formData.pickup_option === 'warehouse_dropoff') warehouseFee += 15
-      if (formData.delivery_option === 'warehouse_pickup') warehouseFee += 15
+    try {
+      // Use AI pricing service
+      const result = await pricingService.getPriceBreakdown({
+        pickup_city: formData.pickup_city,
+        delivery_city: formData.delivery_city,
+        weight: weight,
+        service_type: formData.service_type,
+        pickup_option: formData.pickup_option,
+        delivery_option: formData.delivery_option,
+        fragile: formData.fragile,
+        insurance_value: parseFloat(formData.insurance_value) || 0
+      })
+      
+      if (result) {
+        setPriceEstimate({
+          base: result.basePrice,
+          warehouse: result.breakdown.warehouseFees,
+          insurance: result.breakdown.insuranceFee,
+          fragile: result.breakdown.fragileFee,
+          total: result.total,
+          method: result.method,
+          aiAnalysis: result.aiAnalysis
+        })
+        setAiPowered(result.method === 'ai_agent')
+      }
+    } catch (error) {
+      console.error('Price calculation error:', error)
+      // Fallback calculation
+      const basePrice = isInterCity ? 80 : 25
+      const weightCost = isInterCity ? weight * 8 : weight * 3
+      
+      let warehouseFee = 0
+      if (isInterCity) {
+        if (formData.pickup_option === 'warehouse_dropoff') warehouseFee += 15
+        if (formData.delivery_option === 'warehouse_pickup') warehouseFee += 15
+      }
+      
+      const insuranceFee = parseFloat(formData.insurance_value) * 0.02
+      const fragileFee = formData.fragile ? 25 : 0
+      const serviceMultiplier = formData.service_type === 'express' ? 1.5 : 1.0
+      
+      const total = (basePrice + weightCost + warehouseFee + insuranceFee + fragileFee) * serviceMultiplier
+      
+      setPriceEstimate({
+        base: basePrice,
+        weight: weightCost,
+        warehouse: warehouseFee,
+        insurance: insuranceFee,
+        fragile: fragileFee,
+        multiplier: serviceMultiplier,
+        total: Math.round(total * 100) / 100,
+        method: 'fallback'
+      })
+      setAiPowered(false)
+    } finally {
+      setCalculatingPrice(false)
     }
-    
-    const insuranceFee = parseFloat(formData.insurance_value) * 0.02
-    const fragileFee = formData.fragile ? 25 : 0
-    const serviceMultiplier = formData.service_type === 'express' ? 1.5 : 1.0
-    
-    const total = (basePrice + weightCost + warehouseFee + insuranceFee + fragileFee) * serviceMultiplier
-    
-    setPriceEstimate({
-      base: basePrice,
-      weight: weightCost,
-      warehouse: warehouseFee,
-      insurance: insuranceFee,
-      fragile: fragileFee,
-      multiplier: serviceMultiplier,
-      total: Math.round(total * 100) / 100
-    })
   }
 
   const handleSubmit = async (e) => {
@@ -189,7 +228,9 @@ export default function CreateOrder() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      <CustomerNavbar />
+      <div className="max-w-5xl mx-auto px-4 py-8">
       <AIProcessingModal 
         isOpen={showAIModal} 
         onClose={() => setShowAIModal(false)}
@@ -574,19 +615,29 @@ export default function CreateOrder() {
         {/* Price Estimate */}
         {priceEstimate && (
           <div className="card p-6 bg-gradient-to-br from-green-50 to-blue-50 border-2 border-green-200">
-            <div className="flex items-center gap-2 mb-4">
-              <DollarSign className="w-5 h-5 text-green-600" />
-              <h3 className="font-semibold text-lg">Price Estimate</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-green-600" />
+                <h3 className="font-semibold text-lg">Price Estimate</h3>
+              </div>
+              {aiPowered && (
+                <div className="flex items-center gap-1 bg-blue-500 text-white px-3 py-1 rounded-full text-xs">
+                  <Sparkles className="w-3 h-3" />
+                  <span>AI Powered</span>
+                </div>
+              )}
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span>Base Price:</span>
                 <span className="font-medium">{priceEstimate.base} MAD</span>
               </div>
-              <div className="flex justify-between">
-                <span>Weight Cost:</span>
-                <span className="font-medium">{priceEstimate.weight.toFixed(2)} MAD</span>
-              </div>
+              {priceEstimate.weight && (
+                <div className="flex justify-between">
+                  <span>Weight Cost:</span>
+                  <span className="font-medium">{priceEstimate.weight.toFixed(2)} MAD</span>
+                </div>
+              )}
               {priceEstimate.warehouse > 0 && (
                 <div className="flex justify-between">
                   <span>Warehouse Fees:</span>
@@ -605,17 +656,30 @@ export default function CreateOrder() {
                   <span className="font-medium">{priceEstimate.insurance.toFixed(2)} MAD</span>
                 </div>
               )}
-              <div className="flex justify-between text-xs text-gray-600">
-                <span>Service Multiplier:</span>
-                <span>{priceEstimate.multiplier}x</span>
-              </div>
+              {priceEstimate.multiplier && (
+                <div className="flex justify-between text-xs text-gray-600">
+                  <span>Service Multiplier:</span>
+                  <span>{priceEstimate.multiplier}x</span>
+                </div>
+              )}
               <div className="border-t-2 border-green-300 pt-2 mt-2">
                 <div className="flex justify-between text-lg font-bold text-green-700">
                   <span>Total:</span>
                   <span>{priceEstimate.total} MAD</span>
                 </div>
               </div>
+              {priceEstimate.method && (
+                <div className="text-xs text-gray-500 text-center mt-2">
+                  {priceEstimate.method === 'ai_agent' ? '🤖 AI-calculated price' : priceEstimate.method === 'formula' ? 'Standard formula' : 'Fallback calculation'}
+                </div>
+              )}
             </div>
+            {calculatingPrice && (
+              <div className="mt-3 flex items-center justify-center gap-2 text-sm text-blue-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span>Calculating with AI...</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -658,6 +722,7 @@ export default function CreateOrder() {
           {loading ? 'Creating Order...' : `Create Order ${priceEstimate ? `- ${priceEstimate.total} MAD` : ''}`}
         </button>
       </form>
+      </div>
     </div>
   )
 }

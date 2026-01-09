@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+﻿from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -40,7 +40,7 @@ try:
     )
     CREW_AVAILABLE = True
 except Exception as e:
-    print(f"⚠️  CrewAI not available: {e}")
+    print(f"âš ï¸  CrewAI not available: {e}")
     CREW_AVAILABLE = False
     def get_agent_status(): return {"status": "unavailable"}
     async def get_driver_recommendation(order, drivers): return None
@@ -56,7 +56,7 @@ try:
     from api.services.delivery_workflow import process_delivery_order, get_workflow_status
     WORKFLOW_AVAILABLE = True
 except Exception as e:
-    print(f"⚠️  Workflow not available: {e}")
+    print(f"âš ï¸  Workflow not available: {e}")
     WORKFLOW_AVAILABLE = False
     async def process_delivery_order(order, drivers): return None
     def get_workflow_status(): return {"status": "unavailable"}
@@ -234,19 +234,19 @@ async def check_mongodb():
             "database": "delivery_system",
             "collections": collections,
             "document_counts": stats,
-            "message": "✅ MongoDB is working!"
+            "message": "âœ… MongoDB is working!"
         }
     except Exception as e:
         return {
             "status": "disconnected",
             "error": str(e),
-            "message": "❌ MongoDB is not connected. Make sure MongoDB is running."
+            "message": "âŒ MongoDB is not connected. Make sure MongoDB is running."
         }
 
 @app.get("/")
 def root():
     return {
-        "message": "🚀 ULTIMATE MULTI-AGENT DELIVERY SYSTEM",
+        "message": "ðŸš€ ULTIMATE MULTI-AGENT DELIVERY SYSTEM",
         "status": "running",
         "version": "3.0 ULTIMATE",
         "database": "In-memory (MongoDB not integrated yet)",
@@ -257,19 +257,19 @@ def root():
             "Marrakech": f"{len([d for d in drivers_db if d['assigned_city'] == 'Marrakech'])} drivers",
             "Agadir": f"{len([d for d in drivers_db if d['assigned_city'] == 'Agadir'])} drivers",
             "El Jadida": f"{len([d for d in drivers_db if d['assigned_city'] == 'El Jadida'])} drivers",
-            "Salé": f"{len([d for d in drivers_db if d['assigned_city'] == 'Salé'])} drivers"
+            "SalÃ©": f"{len([d for d in drivers_db if d['assigned_city'] == 'SalÃ©'])} drivers"
         },
         "ultimate_features": [
-            "🎯 Multi-driver city coverage (16 total drivers)",
-            "🧠 AI-powered intelligent assignment",
-            "📍 Real-time location-based scoring",
-            "🚗 Vehicle-type optimization", 
-            "⭐ Rating-based selection",
-            "🎪 Specialty matching system",
-            "📊 Load balancing algorithm",
-            "🌦️ Weather-aware routing",
-            "📦 Multi-package optimization",
-            "🏪 Warehouse management"
+            "ðŸŽ¯ Multi-driver city coverage (16 total drivers)",
+            "ðŸ§  AI-powered intelligent assignment",
+            "ðŸ“ Real-time location-based scoring",
+            "ðŸš— Vehicle-type optimization", 
+            "â­ Rating-based selection",
+            "ðŸŽª Specialty matching system",
+            "ðŸ“Š Load balancing algorithm",
+            "ðŸŒ¦ï¸ Weather-aware routing",
+            "ðŸ“¦ Multi-package optimization",
+            "ðŸª Warehouse management"
         ],
         "assignment_factors": {
             "city_match": "50% weight - Same city priority with GPS distance",
@@ -294,12 +294,12 @@ def test():
 # Initialize storage (MongoDB or in-memory based on USE_MONGODB env var)
 if USE_MONGODB:
     print("="*60)
-    print("🗄️  MONGODB ENABLED - Data will persist between restarts")
+    print("ðŸ—„ï¸  MONGODB ENABLED - Data will persist between restarts")
     print("="*60)
 else:
     print("="*60)
-    print("💾 IN-MEMORY MODE - Data will be lost on restart")
-    print("💡 Set USE_MONGODB=true in .env to enable persistence")
+    print("ðŸ’¾ IN-MEMORY MODE - Data will be lost on restart")
+    print("ðŸ’¡ Set USE_MONGODB=true in .env to enable persistence")
     print("="*60)
 
 # Get data from storage
@@ -457,592 +457,6 @@ def driver_login(request: DriverLoginRequest):
     
     raise HTTPException(status_code=401, detail="Invalid credentials. Use driver email with password 'driver123'")
 
-# Enhanced data storage with test orders
-orders_db = [
-    {
-        "id": "ORD1001",
-        "tracking_number": "TRK001",
-        "status": "in_transit",
-        "pickup_address": "Boulevard Mohammed V, Casablanca",
-        "delivery_address": "Rue des FAR, Casablanca",
-        "pickup_city": "Casablanca",
-        "delivery_city": "Casablanca",
-        "weight": 2.5,
-        "dimensions": {"length": 20, "width": 15, "height": 10},
-        "service_type": "express",
-        "delivery_type": "door_to_door",
-        "sender_name": "Mohammed Alami",
-        "sender_phone": "+212661111111",
-        "receiver_name": "Sara Benali",
-        "receiver_phone": "+212662222222",
-        "package_description": "Electronics",
-        "total_cost": 67.5,
-        "price": 67.5,
-        "estimated_delivery": "2024-01-15T14:30:00",
-        "created_at": "2024-01-15T09:00:00",
-        "is_inter_city": False,
-        "assigned_driver": "DRV001",
-        "current_location": {"lat": 33.5731, "lng": -7.5898, "timestamp": "2024-01-15T12:30:00"},
-        "route_history": [
-            {"lat": 33.5731, "lng": -7.5898, "timestamp": "2024-01-15T09:15:00"},
-            {"lat": 33.5750, "lng": -7.5900, "timestamp": "2024-01-15T12:30:00"}
-        ]
-    },
-    {
-        "id": "ORD1002",
-        "tracking_number": "TRK002",
-        "status": "picked_up",
-        "pickup_address": "Avenue Hassan II, Casablanca",
-        "delivery_address": "Quartier Maarif, Casablanca",
-        "pickup_city": "Casablanca",
-        "delivery_city": "Casablanca",
-        "weight": 1.2,
-        "dimensions": {"length": 15, "width": 10, "height": 8},
-        "service_type": "standard",
-        "delivery_type": "door_to_door",
-        "sender_name": "Fatima Zahra",
-        "sender_phone": "+212663333333",
-        "receiver_name": "Ahmed Tazi",
-        "receiver_phone": "+212664444444",
-        "package_description": "Documents",
-        "total_cost": 28.6,
-        "price": 28.6,
-        "estimated_delivery": "2024-01-16T10:00:00",
-        "created_at": "2024-01-15T08:30:00",
-        "is_inter_city": False,
-        "assigned_driver": "DRV001",
-        "current_location": {"lat": 33.5731, "lng": -7.5898, "timestamp": "2024-01-15T10:00:00"},
-        "route_history": [{"lat": 33.5731, "lng": -7.5898, "timestamp": "2024-01-15T10:00:00"}]
-    },
-    {
-        "id": "ORD1003",
-        "tracking_number": "TRK003",
-        "status": "in_transit",
-        "pickup_address": "Medina, Marrakech",
-        "delivery_address": "Gueliz, Marrakech",
-        "pickup_city": "Marrakech",
-        "delivery_city": "Marrakech",
-        "weight": 3.8,
-        "dimensions": {"length": 25, "width": 20, "height": 15},
-        "service_type": "express",
-        "delivery_type": "door_to_door",
-        "sender_name": "Youssef Bennani",
-        "sender_phone": "+212665555555",
-        "receiver_name": "Laila Alaoui",
-        "receiver_phone": "+212666666666",
-        "package_description": "Handicrafts",
-        "total_cost": 81.4,
-        "price": 81.4,
-        "estimated_delivery": "2024-01-15T16:00:00",
-        "created_at": "2024-01-15T11:00:00",
-        "is_inter_city": False,
-        "assigned_driver": "DRV003",
-        "current_location": {"lat": 31.6295, "lng": -7.9811, "timestamp": "2024-01-15T13:00:00"},
-        "route_history": [{"lat": 31.6295, "lng": -7.9811, "timestamp": "2024-01-15T13:00:00"}]
-    },
-    {
-        "id": "ORD1004",
-        "tracking_number": "TRK004",
-        "status": "warehouse_processing",
-        "pickup_address": "Centre Ville, Salé",
-        "delivery_address": "Hay Riad, Rabat",
-        "pickup_city": "Salé",
-        "delivery_city": "Rabat",
-        "weight": 5.0,
-        "dimensions": {"length": 30, "width": 25, "height": 20},
-        "service_type": "standard",
-        "delivery_type": "door_to_door",
-        "sender_name": "Rachid Benali",
-        "sender_phone": "+212667777777",
-        "receiver_name": "Nadia Alami",
-        "receiver_phone": "+212668888888",
-        "package_description": "Furniture parts",
-        "total_cost": 89.6,
-        "price": 89.6,
-        "estimated_delivery": "2024-01-16T14:00:00",
-        "created_at": "2024-01-15T07:00:00",
-        "is_inter_city": True,
-        "assigned_driver": "DRV006",
-        "current_location": {"lat": 34.0531, "lng": -6.7985, "timestamp": "2024-01-15T08:00:00"},
-        "route_history": [{"lat": 34.0531, "lng": -6.7985, "timestamp": "2024-01-15T08:00:00"}]
-    },
-    {
-        "id": "ORD1005",
-        "tracking_number": "TRK005",
-        "status": "pending_assignment",
-        "pickup_address": "Marina, Agadir",
-        "delivery_address": "Souk Al Had, Agadir",
-        "pickup_city": "Agadir",
-        "delivery_city": "Agadir",
-        "weight": 1.5,
-        "dimensions": {"length": 12, "width": 8, "height": 6},
-        "service_type": "standard",
-        "delivery_type": "door_to_door",
-        "sender_name": "Hassan Tazi",
-        "sender_phone": "+212669999999",
-        "receiver_name": "Amina Benali",
-        "receiver_phone": "+212660000000",
-        "package_description": "Cosmetics",
-        "total_cost": 29.5,
-        "price": 29.5,
-        "estimated_delivery": "2024-01-16T11:00:00",
-        "created_at": "2024-01-15T14:00:00",
-        "is_inter_city": False,
-        "assigned_driver": None,
-        "current_location": None,
-        "route_history": []
-    },
-    {
-        "id": "ORD1006",
-        "tracking_number": "TRK006",
-        "status": "warehouse_transit",
-        "pickup_address": "Corniche, Casablanca",
-        "delivery_address": "Kasbah, Marrakech",
-        "pickup_city": "Casablanca",
-        "delivery_city": "Marrakech",
-        "weight": 8.5,
-        "dimensions": {"length": 40, "width": 30, "height": 25},
-        "service_type": "express",
-        "delivery_type": "warehouse_delivery",
-        "sender_name": "Karim Alaoui",
-        "sender_phone": "+212661010101",
-        "receiver_name": "Zineb Bennani",
-        "receiver_phone": "+212662020202",
-        "package_description": "Textiles",
-        "total_cost": 387.2,
-        "price": 387.2,
-        "estimated_delivery": "2024-01-16T18:00:00",
-        "created_at": "2024-01-15T06:00:00",
-        "is_inter_city": True,
-        "assigned_driver": None,
-        "current_location": {"lat": 33.5731, "lng": -7.5898, "timestamp": "2024-01-15T07:00:00"},
-        "route_history": [{"lat": 33.5731, "lng": -7.5898, "timestamp": "2024-01-15T07:00:00"}]
-    },
-    {
-        "id": "IC1007",
-        "tracking_number": "IC007",
-        "status": "at_origin_warehouse",
-        "pickup_address": "Avenue Mohammed VI, Rabat",
-        "delivery_address": "Jemaa el-Fnaa, Marrakech",
-        "pickup_city": "Rabat",
-        "delivery_city": "Marrakech",
-        "weight": 12.0,
-        "dimensions": {"length": 50, "width": 40, "height": 30},
-        "service_type": "standard",
-        "pickup_option": "warehouse_dropoff",
-        "delivery_option": "door_delivery",
-        "sender_name": "Mehdi Alaoui",
-        "sender_phone": "+212663030303",
-        "receiver_name": "Samira Bennani",
-        "receiver_phone": "+212664040404",
-        "package_description": "Traditional crafts",
-        "fragile": True,
-        "insurance_value": 500.0,
-        "total_cost": 245.8,
-        "price": 245.8,
-        "estimated_delivery": "2024-01-17T16:00:00",
-        "created_at": "2024-01-14T10:00:00",
-        "is_inter_city": True,
-        "assigned_driver": None,
-        "current_location": None,
-        "route_history": [],
-        "warehouse_status": "processing",
-        "current_warehouse": "Rabat",
-        "transport_schedule": {"next_departure": "08:00", "duration": "4 hours", "vehicle": "truck"}
-    },
-    {
-        "id": "IC1008",
-        "tracking_number": "IC008",
-        "status": "in_transit_inter_city",
-        "pickup_address": "Marina Bay, Agadir",
-        "delivery_address": "Maarif, Casablanca",
-        "pickup_city": "Agadir",
-        "delivery_city": "Casablanca",
-        "weight": 6.5,
-        "dimensions": {"length": 35, "width": 25, "height": 20},
-        "service_type": "express",
-        "pickup_option": "door_pickup",
-        "delivery_option": "warehouse_pickup",
-        "sender_name": "Yousra Tazi",
-        "sender_phone": "+212665050505",
-        "receiver_name": "Khalid Benali",
-        "receiver_phone": "+212666060606",
-        "package_description": "Argan oil products",
-        "fragile": False,
-        "insurance_value": 200.0,
-        "total_cost": 892.4,
-        "price": 892.4,
-        "estimated_delivery": "2024-01-16T12:00:00",
-        "created_at": "2024-01-15T08:00:00",
-        "is_inter_city": True,
-        "assigned_driver": "DRV004",
-        "current_location": {"lat": 32.5, "lng": -8.2, "timestamp": "2024-01-15T14:00:00"},
-        "route_history": [
-            {"lat": 30.4278, "lng": -9.5981, "timestamp": "2024-01-15T08:30:00"},
-            {"lat": 32.5, "lng": -8.2, "timestamp": "2024-01-15T14:00:00"}
-        ],
-        "warehouse_status": "in_transit",
-        "current_warehouse": None,
-        "transport_schedule": {"next_departure": "07:00", "duration": "6 hours", "vehicle": "truck"}
-    }
-]
-# ULTIMATE FINAL VERSION - Multiple drivers per city with intelligent assignment
-drivers_db = [
-    # CASABLANCA DRIVERS (4 drivers)
-    {
-        "id": "DRV001",
-        "name": "Ahmed Benali",
-        "email": "ahmed@delivery.ma",
-        "phone": "+212661234567",
-        "vehicle_type": "bike",
-        "vehicle_capacity": 20.0,
-        "assigned_city": "Casablanca",
-        "current_location": {"lat": 33.5731, "lng": -7.5898, "city": "Casablanca"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.8,
-        "total_deliveries": 156,
-        "working_hours": {"start": "08:00", "end": "20:00"},
-        "specialties": ["express_delivery", "documents"]
-    },
-    {
-        "id": "DRV002",
-        "name": "Youssef Alami",
-        "email": "youssef@delivery.ma",
-        "phone": "+212662345678",
-        "vehicle_type": "car",
-        "vehicle_capacity": 100.0,
-        "assigned_city": "Casablanca",
-        "current_location": {"lat": 33.5850, "lng": -7.6000, "city": "Casablanca"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.9,
-        "total_deliveries": 203,
-        "working_hours": {"start": "07:00", "end": "19:00"},
-        "specialties": ["bulk_delivery", "fragile_items"]
-    },
-    {
-        "id": "DRV003",
-        "name": "Fatima Zahra",
-        "email": "fatima@delivery.ma",
-        "phone": "+212663456789",
-        "vehicle_type": "scooter",
-        "vehicle_capacity": 30.0,
-        "assigned_city": "Casablanca",
-        "current_location": {"lat": 33.5600, "lng": -7.5700, "city": "Casablanca"},
-        "status": "busy",
-        "current_orders": ["ORD1001"],
-        "rating": 4.7,
-        "total_deliveries": 89,
-        "working_hours": {"start": "09:00", "end": "21:00"},
-        "specialties": ["fast_delivery", "city_center"]
-    },
-    {
-        "id": "DRV004",
-        "name": "Karim Bennani",
-        "email": "karim@delivery.ma",
-        "phone": "+212664567890",
-        "vehicle_type": "van",
-        "vehicle_capacity": 200.0,
-        "assigned_city": "Casablanca",
-        "current_location": {"lat": 33.5900, "lng": -7.6100, "city": "Casablanca"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.6,
-        "total_deliveries": 312,
-        "working_hours": {"start": "06:00", "end": "18:00"},
-        "specialties": ["heavy_cargo", "warehouse", "inter_city"]
-    },
-    
-    # RABAT DRIVERS (3 drivers)
-    {
-        "id": "DRV005",
-        "name": "Laila Alaoui",
-        "email": "laila@delivery.ma",
-        "phone": "+212665678901",
-        "vehicle_type": "car",
-        "vehicle_capacity": 80.0,
-        "assigned_city": "Rabat",
-        "current_location": {"lat": 34.0209, "lng": -6.8416, "city": "Rabat"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.9,
-        "total_deliveries": 145,
-        "working_hours": {"start": "07:30", "end": "20:30"},
-        "specialties": ["residential", "same_day"]
-    },
-    {
-        "id": "DRV006",
-        "name": "Omar Tazi",
-        "email": "omar@delivery.ma",
-        "phone": "+212666789012",
-        "vehicle_type": "bike",
-        "vehicle_capacity": 25.0,
-        "assigned_city": "Rabat",
-        "current_location": {"lat": 34.0300, "lng": -6.8500, "city": "Rabat"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.8,
-        "total_deliveries": 67,
-        "working_hours": {"start": "08:30", "end": "19:30"},
-        "specialties": ["express_delivery", "documents"]
-    },
-    {
-        "id": "DRV007",
-        "name": "Nadia Benali",
-        "email": "nadia@delivery.ma",
-        "phone": "+212667890123",
-        "vehicle_type": "scooter",
-        "vehicle_capacity": 35.0,
-        "assigned_city": "Rabat",
-        "current_location": {"lat": 34.0100, "lng": -6.8300, "city": "Rabat"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.7,
-        "total_deliveries": 98,
-        "working_hours": {"start": "08:00", "end": "20:00"},
-        "specialties": ["fast_delivery", "fragile_items"]
-    },
-    
-    # MARRAKECH DRIVERS (3 drivers)
-    {
-        "id": "DRV008",
-        "name": "Hassan Alami",
-        "email": "hassan@delivery.ma",
-        "phone": "+212668901234",
-        "vehicle_type": "car",
-        "vehicle_capacity": 90.0,
-        "assigned_city": "Marrakech",
-        "current_location": {"lat": 31.6295, "lng": -7.9811, "city": "Marrakech"},
-        "status": "busy",
-        "current_orders": ["ORD1003"],
-        "rating": 4.8,
-        "total_deliveries": 134,
-        "working_hours": {"start": "07:00", "end": "19:00"},
-        "specialties": ["bulk_delivery", "residential"]
-    },
-    {
-        "id": "DRV009",
-        "name": "Aicha Bennani",
-        "email": "aicha@delivery.ma",
-        "phone": "+212669012345",
-        "vehicle_type": "bike",
-        "vehicle_capacity": 22.0,
-        "assigned_city": "Marrakech",
-        "current_location": {"lat": 31.6400, "lng": -7.9900, "city": "Marrakech"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.6,
-        "total_deliveries": 76,
-        "working_hours": {"start": "09:00", "end": "21:00"},
-        "specialties": ["express_delivery", "city_center"]
-    },
-    {
-        "id": "DRV010",
-        "name": "Rachid Tazi",
-        "email": "rachid@delivery.ma",
-        "phone": "+212660123456",
-        "vehicle_type": "van",
-        "vehicle_capacity": 180.0,
-        "assigned_city": "Marrakech",
-        "current_location": {"lat": 31.6200, "lng": -7.9700, "city": "Marrakech"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.9,
-        "total_deliveries": 201,
-        "working_hours": {"start": "06:00", "end": "18:00"},
-        "specialties": ["heavy_cargo", "warehouse", "inter_city"]
-    },
-    
-    # AGADIR DRIVERS (2 drivers)
-    {
-        "id": "DRV011",
-        "name": "Khadija Alaoui",
-        "email": "khadija@delivery.ma",
-        "phone": "+212661234567",
-        "vehicle_type": "van",
-        "vehicle_capacity": 200.0,
-        "assigned_city": "Agadir",
-        "current_location": {"lat": 30.4278, "lng": -9.5981, "city": "Agadir"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.9,
-        "total_deliveries": 312,
-        "working_hours": {"start": "06:00", "end": "18:00"},
-        "specialties": ["heavy_cargo", "long_distance", "warehouse"]
-    },
-    {
-        "id": "DRV012",
-        "name": "Mehdi Benali",
-        "email": "mehdi@delivery.ma",
-        "phone": "+212662345678",
-        "vehicle_type": "car",
-        "vehicle_capacity": 85.0,
-        "assigned_city": "Agadir",
-        "current_location": {"lat": 30.4400, "lng": -9.6100, "city": "Agadir"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.7,
-        "total_deliveries": 89,
-        "working_hours": {"start": "08:00", "end": "20:00"},
-        "specialties": ["coastal_delivery", "same_day"]
-    },
-    
-    # EL JADIDA DRIVERS (2 drivers)
-    {
-        "id": "DRV013",
-        "name": "Zineb Alami",
-        "email": "zineb@delivery.ma",
-        "phone": "+212663456789",
-        "vehicle_type": "bike",
-        "vehicle_capacity": 25.0,
-        "assigned_city": "El Jadida",
-        "current_location": {"lat": 33.2316, "lng": -8.5007, "city": "El Jadida"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.6,
-        "total_deliveries": 67,
-        "working_hours": {"start": "08:30", "end": "19:30"},
-        "specialties": ["coastal_delivery", "documents"]
-    },
-    {
-        "id": "DRV014",
-        "name": "Samir Bennani",
-        "email": "samir@delivery.ma",
-        "phone": "+212664567890",
-        "vehicle_type": "scooter",
-        "vehicle_capacity": 40.0,
-        "assigned_city": "El Jadida",
-        "current_location": {"lat": 33.2400, "lng": -8.5100, "city": "El Jadida"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.8,
-        "total_deliveries": 123,
-        "working_hours": {"start": "07:00", "end": "19:00"},
-        "specialties": ["fast_delivery", "express_delivery"]
-    },
-    
-    # SALÉ DRIVERS (2 drivers)
-    {
-        "id": "DRV015",
-        "name": "Amina Tazi",
-        "email": "amina@delivery.ma",
-        "phone": "+212665678901",
-        "vehicle_type": "car",
-        "vehicle_capacity": 80.0,
-        "assigned_city": "Salé",
-        "current_location": {"lat": 34.0531, "lng": -6.7985, "city": "Salé"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.8,
-        "total_deliveries": 145,
-        "working_hours": {"start": "07:30", "end": "20:30"},
-        "specialties": ["residential", "same_day"]
-    },
-    {
-        "id": "DRV016",
-        "name": "Khalid Alaoui",
-        "email": "khalid@delivery.ma",
-        "phone": "+212666789012",
-        "vehicle_type": "bike",
-        "vehicle_capacity": 28.0,
-        "assigned_city": "Salé",
-        "current_location": {"lat": 34.0600, "lng": -6.8100, "city": "Salé"},
-        "status": "available",
-        "current_orders": [],
-        "rating": 4.7,
-        "total_deliveries": 92,
-        "working_hours": {"start": "08:00", "end": "20:00"},
-        "specialties": ["express_delivery", "documents"]
-    }
-]
-
-warehouses_db = [
-    {
-        "id": "WH001",
-        "name": "Casablanca Central Warehouse",
-        "city": "Casablanca",
-        "address": "Zone Industrielle Ain Sebaa, Casablanca",
-        "location": {"lat": 33.6089, "lng": -7.5372},
-        "capacity": 1000,
-        "current_packages": 45,
-        "status": "operational",
-        "manager": "Hassan Alami",
-        "phone": "+212520123456",
-        "operating_hours": "24/7",
-        "facilities": ["cold_storage", "loading_dock", "security"]
-    },
-    {
-        "id": "WH002",
-        "name": "Rabat Distribution Hub",
-        "city": "Rabat",
-        "address": "Technopolis, Rabat",
-        "location": {"lat": 33.9716, "lng": -6.8498},
-        "capacity": 800,
-        "current_packages": 32,
-        "status": "operational",
-        "manager": "Fatima Bennani",
-        "phone": "+212537234567",
-        "operating_hours": "06:00-22:00",
-        "facilities": ["loading_dock", "security", "sorting_area"]
-    },
-    {
-        "id": "WH003",
-        "name": "Marrakech Logistics Center",
-        "city": "Marrakech",
-        "address": "Route de Safi, Marrakech",
-        "location": {"lat": 31.6069, "lng": -8.0363},
-        "capacity": 600,
-        "current_packages": 28,
-        "status": "operational",
-        "manager": "Youssef Tazi",
-        "phone": "+212524345678",
-        "operating_hours": "07:00-20:00",
-        "facilities": ["loading_dock", "security"]
-    },
-    {
-        "id": "WH004",
-        "name": "Agadir Coastal Depot",
-        "city": "Agadir",
-        "address": "Zone Industrielle Tassila, Agadir",
-        "location": {"lat": 30.3908, "lng": -9.5598},
-        "capacity": 500,
-        "current_packages": 22,
-        "status": "operational",
-        "manager": "Amina Alaoui",
-        "phone": "+212528456789",
-        "operating_hours": "08:00-18:00",
-        "facilities": ["loading_dock", "cold_storage"]
-    },
-    {
-        "id": "WH005",
-        "name": "El Jadida Storage Facility",
-        "city": "El Jadida",
-        "address": "Zone Industrielle, El Jadida",
-        "location": {"lat": 33.2542, "lng": -8.4821},
-        "capacity": 400,
-        "current_packages": 15,
-        "status": "operational",
-        "manager": "Rachid Benali",
-        "phone": "+212523567890",
-        "operating_hours": "08:00-18:00",
-        "facilities": ["loading_dock", "security"]
-    },
-    {
-        "id": "WH006",
-        "name": "Salé Distribution Point",
-        "city": "Salé",
-        "address": "Hay Karima, Salé",
-        "location": {"lat": 34.0209, "lng": -6.7985},
-        "capacity": 300,
-        "current_packages": 12,
-        "status": "operational",
-        "manager": "Laila Tazi",
-        "phone": "+212537678901",
-        "operating_hours": "07:00-19:00",
-        "facilities": ["loading_dock", "sorting_area"]
-    }
-]
 
 # Initialize workflow managers after databases are defined
 def init_workflow_managers():
@@ -1086,21 +500,21 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     from datetime import datetime, timedelta
     
     print("\n" + "="*60)
-    print("🚀 NEW ORDER CREATION STARTED")
+    print("ðŸš€ NEW ORDER CREATION STARTED")
     print("="*60)
     
     order_id = f"ORD{random.randint(1000, 9999)}"
     tracking_number = f"TRK{random.randint(100, 999)}"
     
-    print(f"📦 Order ID: {order_id}")
-    print(f"🔢 Tracking: {tracking_number}")
-    print(f"👤 Customer: {current_user['username']}")
+    print(f"ðŸ“¦ Order ID: {order_id}")
+    print(f"ðŸ”¢ Tracking: {tracking_number}")
+    print(f"ðŸ‘¤ Customer: {current_user['username']}")
     
     # Enhanced pricing calculation in Dirhams
     is_inter_city = order.pickup_city.lower() != order.delivery_city.lower()
     
-    print(f"🏙️  Route: {order.pickup_city} → {order.delivery_city}")
-    print(f"📍 Type: {'INTER-CITY' if is_inter_city else 'INTRA-CITY'}")
+    print(f"ðŸ™ï¸  Route: {order.pickup_city} â†’ {order.delivery_city}")
+    print(f"ðŸ“ Type: {'INTER-CITY' if is_inter_city else 'INTRA-CITY'}")
     
     if is_inter_city:
         # Inter-city pricing
@@ -1120,7 +534,7 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     service_multiplier = {"standard": 1.0, "express": 1.5}.get(order.service_type, 1.0)  # Reduced express from 1.8 to 1.5
     total_cost = (base_price + distance_cost + weight_cost + dimension_cost + warehouse_fee) * service_multiplier
     
-    print(f"\n💰 PRICING CALCULATION:")
+    print(f"\nðŸ’° PRICING CALCULATION:")
     print(f"   Base: {base_price} MAD")
     print(f"   Distance: {distance_cost:.2f} MAD")
     print(f"   Weight: {weight_cost:.2f} MAD")
@@ -1181,7 +595,7 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     orders_db.append(new_order)
     storage.add_order(new_order)  # Save to storage (MongoDB or in-memory)
     
-    print(f"\n🤖 AI AGENT PROCESSING:")
+    print(f"\nðŸ¤– AI AGENT PROCESSING:")
     
     # Refresh drivers from storage to get latest data
     refresh_data()
@@ -1211,7 +625,7 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     
     # For intra-city: STRICT city matching, auto-accept
     if not is_inter_city:
-        print(f"\n🎯 INTRA-CITY ASSIGNMENT (Auto-Accept):")
+        print(f"\nðŸŽ¯ INTRA-CITY ASSIGNMENT (Auto-Accept):")
         # Only drivers from the SAME city
         same_city_drivers = [d for d in drivers_db if 
                            d.get("status") in ["available", "online"] and
@@ -1219,12 +633,12 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
         
         print(f"   Analyzing {len(same_city_drivers)} drivers...")
         if same_city_drivers:
-            print(f"   🧠 AI Agent: Calculating best driver match...")
+            print(f"   ðŸ§  AI Agent: Calculating best driver match...")
             best_driver = await assignment_service.find_best_driver(new_order, same_city_drivers)
             if best_driver:
-                print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
-                print(f"   📊 Rating: {best_driver['rating']}/5.0")
-                print(f"   🚗 Vehicle: {best_driver['vehicle_type'].upper()}")
+                print(f"   âœ… Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
+                print(f"   ðŸ“Š Rating: {best_driver['rating']}/5.0")
+                print(f"   ðŸš— Vehicle: {best_driver['vehicle_type'].upper()}")
                 new_order["assigned_driver"] = best_driver["id"]
                 new_order["status"] = "assigned"  # Auto-accept for intra-city
                 best_driver["current_orders"].append(order_id)
@@ -1244,34 +658,34 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
                         drivers_db[i] = best_driver
                         break
                 
-                print(f"   ⚡ Status: AUTO-ACCEPTED & SAVED")
+                print(f"   âš¡ Status: AUTO-ACCEPTED & SAVED")
             else:
-                print(f"   ❌ No suitable driver found")
+                print(f"   âŒ No suitable driver found")
         else:
-            print(f"   ⚠️  No available drivers in {order.pickup_city}")
+            print(f"   âš ï¸  No available drivers in {order.pickup_city}")
     else:
-        print(f"\n🌍 INTER-CITY ASSIGNMENT (Manual Accept):")
+        print(f"\nðŸŒ INTER-CITY ASSIGNMENT (Manual Accept):")
         # For inter-city: use existing workflow
         best_driver = None
         if WORKFLOW_AVAILABLE:
             try:
-                print(f"   🤖 AI Workflow: Processing inter-city delivery...")
+                print(f"   ðŸ¤– AI Workflow: Processing inter-city delivery...")
                 workflow_result = await process_delivery_order(new_order, city_drivers)
                 if workflow_result and "best_driver" in workflow_result:
                     best_driver = workflow_result["best_driver"]
                     new_order["ai_workflow"] = workflow_result.get("workflow")
                     new_order["agents_used"] = workflow_result.get("agents_used", [])
-                    print(f"   ✅ Workflow completed")
+                    print(f"   âœ… Workflow completed")
             except Exception as e:
-                print(f"   ⚠️  Workflow error: {e}")
+                print(f"   âš ï¸  Workflow error: {e}")
         
         if not best_driver:
-            print(f"   🧠 AI Agent: Finding best driver...")
+            print(f"   ðŸ§  AI Agent: Finding best driver...")
             best_driver = await assignment_service.find_best_driver(new_order, city_drivers)
         
         if best_driver:
-            print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
-            print(f"   📊 Rating: {best_driver['rating']}/5.0")
+            print(f"   âœ… Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
+            print(f"   ðŸ“Š Rating: {best_driver['rating']}/5.0")
             new_order["assigned_driver"] = best_driver["id"]
             new_order["status"] = "pending_acceptance"
             new_order["assignment_attempts"] = 1
@@ -1285,18 +699,18 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
                     orders_db[i] = new_order
                     break
             
-            print(f"   ⏳ Status: PENDING DRIVER ACCEPTANCE & SAVED")
+            print(f"   â³ Status: PENDING DRIVER ACCEPTANCE & SAVED")
         else:
-            print(f"   ❌ No suitable driver found")
+            print(f"   âŒ No suitable driver found")
     
     print("\n" + "="*60)
-    print("✅ ORDER CREATED SUCCESSFULLY")
+    print("âœ… ORDER CREATED SUCCESSFULLY")
     print("="*60 + "\n")
     
     # Start delivery simulation if order is assigned
     if new_order.get("assigned_driver") and new_order["status"] == "assigned":
         simulator.start_simulation(order_id, new_order, orders_db)
-        print(f"🎬 Delivery simulation started for order {order_id}")
+        print(f"ðŸŽ¬ Delivery simulation started for order {order_id}")
     
     # Clean MongoDB ObjectId before returning
     if USE_MONGODB:
@@ -1416,6 +830,20 @@ def complete_delivery_final(completion_data: dict):
         order["delivered_at"] = datetime.now().isoformat()
         order["completion_notes"] = notes
         
+        # Send notification to customer
+        notification = {
+            "id": f"notif_{order_id}_{datetime.now().timestamp()}",
+            "user_id": order.get("user_id"),
+            "type": "delivery_completed",
+            "title": "Package Delivered!",
+            "message": f"Your package (Tracking: {order['tracking_number']}) has been delivered successfully.",
+            "order_id": order_id,
+            "read": False,
+            "created_at": datetime.now().isoformat()
+        }
+        notifications_db.append(notification)
+        storage.add_notification(notification)
+        
         if order_id in driver["current_orders"]:
             driver["current_orders"].remove(order_id)
             driver["total_deliveries"] += 1
@@ -1486,15 +914,15 @@ def calculate_inter_city_distance(city1: str, city2: str) -> float:
         ("casablanca", "rabat"): 87,
         ("casablanca", "marrakech"): 239,
         ("casablanca", "el jadida"): 99,
-        ("casablanca", "salé"): 91,
+        ("casablanca", "salÃ©"): 91,
         ("casablanca", "agadir"): 508,
         ("rabat", "marrakech"): 325,
         ("rabat", "el jadida"): 140,
-        ("rabat", "salé"): 12,
+        ("rabat", "salÃ©"): 12,
         ("rabat", "agadir"): 588,
         ("marrakech", "agadir"): 269,
         ("marrakech", "el jadida"): 338,
-        ("marrakech", "salé"): 337
+        ("marrakech", "salÃ©"): 337
     }
     
     key = tuple(sorted([city1.lower(), city2.lower()]))
@@ -1720,7 +1148,7 @@ def get_city_coordinates(city: str) -> dict:
         "rabat": {"lat": 34.0209, "lng": -6.8416},
         "marrakech": {"lat": 31.6295, "lng": -7.9811},
         "el jadida": {"lat": 33.2316, "lng": -8.5007},
-        "salé": {"lat": 34.0531, "lng": -6.7985},
+        "salÃ©": {"lat": 34.0531, "lng": -6.7985},
         "agadir": {"lat": 30.4278, "lng": -9.5981}
     }
     return coordinates.get(city.lower(), coordinates["casablanca"])
@@ -1957,7 +1385,7 @@ def get_all_city_coordinates() -> dict:
         "Rabat": {"lat": 34.0209, "lng": -6.8416},
         "Marrakech": {"lat": 31.6295, "lng": -7.9811},
         "El Jadida": {"lat": 33.2316, "lng": -8.5007},
-        "Salé": {"lat": 34.0531, "lng": -6.7985},
+        "SalÃ©": {"lat": 34.0531, "lng": -6.7985},
         "Agadir": {"lat": 30.4278, "lng": -9.5981}
     }
 
@@ -2013,13 +1441,27 @@ def update_delivery_status(order_id: str, update: DeliveryUpdate):
     # Save to storage
     storage.update_order(order_id, order)
     
-    # If delivered, free up driver
+    # If delivered, free up driver and send notification to customer
     if update.status == "delivered" and order["assigned_driver"]:
         driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
         if driver and order_id in driver["current_orders"]:
             driver["current_orders"].remove(order_id)
             driver["total_deliveries"] += 1
             storage.update_driver(driver["id"], driver)
+        
+        # Send notification to customer
+        notification = {
+            "id": f"notif_{order_id}_{datetime.now().timestamp()}",
+            "user_id": order.get("user_id"),
+            "type": "delivery_completed",
+            "title": "Package Delivered!",
+            "message": f"Your package (Tracking: {order['tracking_number']}) has been delivered successfully.",
+            "order_id": order_id,
+            "read": False,
+            "created_at": datetime.now().isoformat()
+        }
+        notifications_db.append(notification)
+        storage.add_notification(notification)
     
     return {"message": "Status updated", "order": order}
 
@@ -2174,7 +1616,7 @@ def get_weather(city: str):
         "rabat": {"lat": 34.0209, "lon": -6.8416},
         "marrakech": {"lat": 31.6295, "lon": -7.9811},
         "el jadida": {"lat": 33.2316, "lon": -8.5007},
-        "salé": {"lat": 34.0531, "lon": -6.7985},
+        "salÃ©": {"lat": 34.0531, "lon": -6.7985},
         "agadir": {"lat": 30.4278, "lon": -9.5981}
     }
     
@@ -2346,7 +1788,7 @@ def get_supported_cities():
             {"name": "Rabat", "code": "RAB", "warehouse": True, "hub": True},
             {"name": "Marrakech", "code": "MAR", "warehouse": True, "hub": False},
             {"name": "El Jadida", "code": "JAD", "warehouse": True, "hub": False},
-            {"name": "Salé", "code": "SAL", "warehouse": True, "hub": False},
+            {"name": "SalÃ©", "code": "SAL", "warehouse": True, "hub": False},
             {"name": "Agadir", "code": "AGA", "warehouse": True, "hub": False}
         ],
         "inter_city_routes": [
@@ -2354,7 +1796,7 @@ def get_supported_cities():
             {"from": "Casablanca", "to": "Marrakech", "schedule": "Daily at 09:00, 15:00", "duration": "3 hours", "next_departure": "09:00"},
             {"from": "Casablanca", "to": "Agadir", "schedule": "Every 2 days at 07:00", "duration": "6 hours", "next_departure": "07:00"},
             {"from": "Casablanca", "to": "El Jadida", "schedule": "Daily at 10:00, 16:00", "duration": "1.5 hours", "next_departure": "10:00"},
-            {"from": "Rabat", "to": "Salé", "schedule": "Every 2 hours", "duration": "30 minutes", "next_departure": "Every 2 hours"},
+            {"from": "Rabat", "to": "SalÃ©", "schedule": "Every 2 hours", "duration": "30 minutes", "next_departure": "Every 2 hours"},
             {"from": "Rabat", "to": "Marrakech", "schedule": "Daily at 08:00", "duration": "4 hours", "next_departure": "08:00"}
         ],
         "warehouse_info": {
@@ -2582,6 +2024,14 @@ def calculate_pricing(pickup_city: str, delivery_city: str, weight: float = 1.0,
 # Notification system
 notifications_db = []
 
+@app.get("/api/notifications")
+def get_notifications(current_user: dict = Depends(get_current_client)):
+    """Get notifications for current user"""
+    user_id = current_user["id"]
+    user_notifications = [n for n in notifications_db if n.get("user_id") == user_id]
+    unread_count = len([n for n in user_notifications if not n.get("read", False)])
+    return {"notifications": user_notifications, "unread_count": unread_count}
+
 @app.post("/api/notifications/send")
 def send_notification(notification: dict):
     notification["id"] = f"NOT{len(notifications_db) + 1}"
@@ -2592,6 +2042,7 @@ def send_notification(notification: dict):
 
 @app.get("/api/notifications/{user_id}")
 def get_user_notifications(user_id: str):
+    """Get notifications by user ID (legacy endpoint)"""
     user_notifications = [n for n in notifications_db if n.get("user_id") == user_id]
     return {"notifications": user_notifications, "unread_count": len([n for n in user_notifications if not n["read"]])}
 
@@ -2869,6 +2320,20 @@ def complete_delivery(driver_id: str, completion_data: dict):
     order["status"] = "delivered"
     order["delivered_at"] = datetime.now().isoformat()
     order["proof_of_delivery"] = completion_data.get("proof", {})
+    
+    # Send notification to customer
+    notification = {
+        "id": f"notif_{order_id}_{datetime.now().timestamp()}",
+        "user_id": order.get("user_id"),
+        "type": "delivery_completed",
+        "title": "Package Delivered!",
+        "message": f"Your package (Tracking: {order['tracking_number']}) has been delivered successfully.",
+        "order_id": order_id,
+        "read": False,
+        "created_at": datetime.now().isoformat()
+    }
+    notifications_db.append(notification)
+    storage.add_notification(notification)
     
     # Update driver
     driver = next((d for d in drivers_db if d["id"] == driver_id), None)
@@ -3239,35 +2704,35 @@ def update_workflow_status(order_id: str, status_data: dict):
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("🚀 ULTIMATE MULTI-AGENT DELIVERY SYSTEM v3.0 🚀")
+    print("ðŸš€ ULTIMATE MULTI-AGENT DELIVERY SYSTEM v3.0 ðŸš€")
     print("=" * 80)
-    print("✅ Multi-Driver City Coverage (16 total drivers)")
-    print("✅ AI-Powered Intelligent Assignment")
-    print("✅ Real-time Location-Based Scoring")
-    print("✅ Vehicle-Type Optimization")
-    print("✅ Rating-Based Selection")
-    print("✅ Specialty Matching System")
-    print("✅ Load Balancing Algorithm")
-    print("✅ Weather-Aware Routing")
-    print("✅ Multi-Package Optimization")
-    print("✅ Warehouse Management")
+    print("âœ… Multi-Driver City Coverage (16 total drivers)")
+    print("âœ… AI-Powered Intelligent Assignment")
+    print("âœ… Real-time Location-Based Scoring")
+    print("âœ… Vehicle-Type Optimization")
+    print("âœ… Rating-Based Selection")
+    print("âœ… Specialty Matching System")
+    print("âœ… Load Balancing Algorithm")
+    print("âœ… Weather-Aware Routing")
+    print("âœ… Multi-Package Optimization")
+    print("âœ… Warehouse Management")
     print("=" * 80)
-    print("🏙️  ULTIMATE CITY COVERAGE:")
-    print("   • Casablanca → 4 drivers (Ahmed, Youssef, Fatima, Karim)")
-    print("   • Rabat → 3 drivers (Laila, Omar, Nadia)")
-    print("   • Marrakech → 3 drivers (Hassan, Aicha, Rachid)")
-    print("   • Agadir → 2 drivers (Khadija, Mehdi)")
-    print("   • El Jadida → 2 drivers (Zineb, Samir)")
-    print("   • Salé → 2 drivers (Amina, Khalid)")
+    print("ðŸ™ï¸  ULTIMATE CITY COVERAGE:")
+    print("   â€¢ Casablanca â†’ 4 drivers (Ahmed, Youssef, Fatima, Karim)")
+    print("   â€¢ Rabat â†’ 3 drivers (Laila, Omar, Nadia)")
+    print("   â€¢ Marrakech â†’ 3 drivers (Hassan, Aicha, Rachid)")
+    print("   â€¢ Agadir â†’ 2 drivers (Khadija, Mehdi)")
+    print("   â€¢ El Jadida â†’ 2 drivers (Zineb, Samir)")
+    print("   â€¢ SalÃ© â†’ 2 drivers (Amina, Khalid)")
     print("=" * 80)
-    print("🎯 ASSIGNMENT FACTORS:")
-    print("   • Location Proximity: 40% (GPS distance)")
-    print("   • Vehicle Suitability: 25% (type, capacity, speed)")
-    print("   • Driver Rating: 15% (customer satisfaction)")
-    print("   • Current Load: 10% (workload balancing)")
-    print("   • Specialties: 10% (skill matching)")
+    print("ðŸŽ¯ ASSIGNMENT FACTORS:")
+    print("   â€¢ Location Proximity: 40% (GPS distance)")
+    print("   â€¢ Vehicle Suitability: 25% (type, capacity, speed)")
+    print("   â€¢ Driver Rating: 15% (customer satisfaction)")
+    print("   â€¢ Current Load: 10% (workload balancing)")
+    print("   â€¢ Specialties: 10% (skill matching)")
     print("=" * 80)
-    print("🌐 URLs:")
+    print("ðŸŒ URLs:")
     print("   Backend: http://localhost:8001")
     print("   API Docs: http://localhost:8001/docs")
     print("   Coverage: http://localhost:8001/api/system/coverage")

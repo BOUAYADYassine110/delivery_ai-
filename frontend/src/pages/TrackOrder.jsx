@@ -4,6 +4,7 @@ import { api } from '../services/api'
 import { MapPin, Search, Package, Map, Clock, Navigation, Cloud } from 'lucide-react'
 import RouteMap from '../components/RouteMap'
 import PackageTracker from '../components/PackageTracker'
+import CustomerNavbar from '../components/CustomerNavbar'
 
 export default function TrackOrder() {
   const [trackingNumber, setTrackingNumber] = useState('')
@@ -73,7 +74,10 @@ export default function TrackOrder() {
   console.log('Order data:', { pickup, delivery, currentLocation, status: order?.status })
 
   return (
-    <div className="animate-fade-in">
+    <div className="min-h-screen bg-gray-50">
+      <CustomerNavbar />
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="animate-fade-in">
       <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-8">Track Your Order</h1>
 
       <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl shadow-xl p-8 mb-8">
@@ -236,6 +240,8 @@ export default function TrackOrder() {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   )
 }
