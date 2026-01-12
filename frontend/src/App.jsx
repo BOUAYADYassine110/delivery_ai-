@@ -5,7 +5,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute'
 import Navbar from './components/Navbar'
 import ErrorBoundary from './components/ErrorBoundary'
-import Loading from './components/Loading'
+import Loading from './components/LoadingScreen'
 
 // Lazy load pages for code splitting
 const Welcome = lazy(() => import('./pages/Welcome'))

@@ -12,92 +12,41 @@ try:
 except:
     CREWAI_AVAILABLE = False
 
-# Create agent instances directly
+# Import agent creators
+if CREWAI_AVAILABLE:
+    from api.agents.intra_city import (
+        create_coordinator_agent,
+        create_courier_management_agent,
+        create_intra_pricing_agent,
+        create_smart_routing_agent,
+        create_client_service_agent
+    )
+    from api.agents.inter_city import (
+        create_inter_city_coordinator_agent,
+        create_warehouse_coordinator_agent,
+        create_transportation_coordinator_agent,
+        create_inter_city_pricing_agent,
+        create_long_distance_routing_agent
+    )
+
+# Create agent instances
 if CREWAI_AVAILABLE:
     try:
         llm_instance = LLM(model="ollama/llama3.2", base_url="http://localhost:11434")
         
         # Intra-city agents
-        coordinator_agent = Agent(
-            role="Intra-City Delivery Coordinator",
-            goal="Orchestrate intra-city delivery workflow",
-            backstory="Expert logistics coordinator for urban deliveries",
-            llm=llm_instance,
-            verbose=True
-        )
-        
-        courier_management_agent = Agent(
-            role="Courier Management Specialist",
-            goal="Assign and manage drivers for deliveries",
-            backstory="Fleet manager optimizing driver assignments",
-            llm=llm_instance,
-            verbose=True
-        )
-        
-        intra_pricing_agent = Agent(
-            role="Intra-City Pricing Agent",
-            goal="Calculate accurate delivery prices",
-            backstory="Pricing expert for local deliveries",
-            llm=llm_instance,
-            verbose=True
-        )
-        
-        smart_routing_agent = Agent(
-            role="Smart Routing Agent",
-            goal="Plan optimal routes within city",
-            backstory="Navigation expert for urban routing",
-            llm=llm_instance,
-            verbose=True
-        )
-        
-        client_service_agent = Agent(
-            role="Client Service Agent",
-            goal="Process and validate customer orders",
-            backstory="Customer service specialist",
-            llm=llm_instance,
-            verbose=True
-        )
+        coordinator_agent = create_coordinator_agent(llm_instance)
+        courier_management_agent = create_courier_management_agent(llm_instance)
+        intra_pricing_agent = create_intra_pricing_agent(llm_instance)
+        smart_routing_agent = create_smart_routing_agent(llm_instance)
+        client_service_agent = create_client_service_agent(llm_instance)
         
         # Inter-city agents
-        inter_city_coordinator_agent = Agent(
-            role="Inter-City Coordinator",
-            goal="Coordinate cross-city deliveries",
-            backstory="Expert in long-distance logistics",
-            llm=llm_instance,
-            verbose=True
-        )
-        
-        warehouse_coordinator_agent = Agent(
-            role="Warehouse Coordinator",
-            goal="Manage warehouse operations",
-            backstory="Warehouse logistics specialist",
-            llm=llm_instance,
-            verbose=True
-        )
-        
-        transportation_coordinator_agent = Agent(
-            role="Transportation Coordinator",
-            goal="Schedule inter-city transport",
-            backstory="Transport scheduling expert",
-            llm=llm_instance,
-            verbose=True
-        )
-        
-        inter_city_pricing_agent = Agent(
-            role="Inter-City Pricing Agent",
-            goal="Calculate inter-city delivery prices",
-            backstory="Long-distance pricing specialist",
-            llm=llm_instance,
-            verbose=True
-        )
-        
-        long_distance_routing_agent = Agent(
-            role="Long Distance Routing Agent",
-            goal="Plan inter-city routes",
-            backstory="Expert in long-distance route planning",
-            llm=llm_instance,
-            verbose=True
-        )
+        inter_city_coordinator_agent = create_inter_city_coordinator_agent(llm_instance)
+        warehouse_coordinator_agent = create_warehouse_coordinator_agent(llm_instance)
+        transportation_coordinator_agent = create_transportation_coordinator_agent(llm_instance)
+        inter_city_pricing_agent = create_inter_city_pricing_agent(llm_instance)
+        long_distance_routing_agent = create_long_distance_routing_agent(llm_instance)
         
         AGENTS_LOADED = True
         print("[SUCCESS] All agents created successfully")

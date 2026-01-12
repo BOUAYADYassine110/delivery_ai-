@@ -10,6 +10,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const { user, logout } = useAuth()
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [showAllOrders, setShowAllOrders] = useState(false)
   
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -56,7 +57,7 @@ export default function Dashboard() {
     assigned: 'bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold'
   }
 
-  const recentOrders = ordersData?.slice(0, 5) || []
+  const recentOrders = showAllOrders ? ordersData : (ordersData?.slice(0, 5) || [])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -100,9 +101,12 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-gray-900">Recent Orders</h2>
                 {ordersData?.length > 5 && (
-                  <Link to="/track" className="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-1">
-                    View All <ArrowRight className="w-4 h-4" />
-                  </Link>
+                  <button 
+                    onClick={() => setShowAllOrders(!showAllOrders)}
+                    className="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-1"
+                  >
+                    {showAllOrders ? 'Show Less' : 'View All'} <ArrowRight className="w-4 h-4" />
+                  </button>
                 )}
               </div>
             </div>

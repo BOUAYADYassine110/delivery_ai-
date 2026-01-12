@@ -134,8 +134,7 @@ export default function CreateOrder() {
     setShowAIModal(true)
 
     try {
-      const auth = JSON.parse(localStorage.getItem('auth') || '{}')
-      const token = auth.access_token
+      const token = localStorage.getItem('token')
 
       if (!token) {
         setShowAIModal(false)
@@ -206,7 +205,9 @@ export default function CreateOrder() {
       setShowAIModal(false)
 
       if (response.status === 401) {
-        localStorage.removeItem('auth')
+        localStorage.removeItem('token')
+        localStorage.removeItem('user_role')
+        localStorage.removeItem('user_data')
         alert('Session expired. Please login again')
         navigate('/login')
         return

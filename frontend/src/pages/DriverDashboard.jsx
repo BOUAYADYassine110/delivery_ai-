@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import LiveGPSTracker from '../components/LiveGPSTracker';
-import AdvancedRouteDisplay from '../components/RouteMapDisplay';
+import AdvancedRouteDisplay from '../components/OptimizedRouteDisplay';
 import MultiPackageManager from '../components/MultiPackageManager';
 import DriverNavbar from '../components/DriverNavbar';
 

@@ -166,7 +166,7 @@ export default function NotificationCenter({ userId }) {
                       )}
                     </div>
                   </div>
-                ))}}
+                ))}
               </div>
             )}
           </div>

@@ -25,14 +25,14 @@ if USE_MONGODB:
 
 from api.routes.gps_routes import router as gps_router
 from api.routes.driver_management import router as driver_router
-from api.services.smart_assignment import SmartAssignmentService
+from api.agents.smart_assignment_agent import SmartAssignmentService
 from api.services.delivery_simulator import simulator
-from api.services.inter_city_workflow import InterCityWorkflow
+from api.agents.inter_city_workflow_agent import InterCityWorkflow
 from api.services.warehouse_manager import WarehouseManager
 
 # Try to import CrewAI services (optional)
 try:
-    from api.services.agent_service import AgentService
+    from api.agents.agent_service import AgentService
     CREW_AVAILABLE = True
 except Exception as e:
     print(f"⚠️  CrewAI not available: {e}")
@@ -172,7 +172,7 @@ async def agents_status():
     """Get AI agents status"""
     try:
         if CREW_AVAILABLE:
-            from api.services.agent_service import AgentService
+            from api.agents.agent_service import AgentService
             base_status = AgentService.get_agent_status()
         else:
             base_status = {"agents": [], "status": "unavailable"}
@@ -628,8 +628,24 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
         
         print(f"   Analyzing {len(same_city_drivers)} drivers...")
         if same_city_drivers:
-            print(f"   🧠 AI Agent: Calculating best driver match...")
-            best_driver = await assignment_service.find_best_driver(new_order, same_city_drivers)
+            # Try workflow agents first
+            best_driver = None
+            if WORKFLOW_AVAILABLE:
+                try:
+                    print(f"   🤖 AI Workflow: Processing intra-city delivery...")
+                    workflow_result = await process_delivery_order(new_order, same_city_drivers)
+                    if workflow_result and "best_driver" in workflow_result:
+                        best_driver = workflow_result["best_driver"]
+                        new_order["ai_workflow"] = workflow_result.get("workflow")
+                        new_order["agents_used"] = workflow_result.get("agents_used", [])
+                        print(f"   ✅ Workflow completed with {len(workflow_result.get('agents_used', []))} agents")
+                except Exception as e:
+                    print(f"   ⚠️  Workflow error: {e}")
+            
+            # Fallback to assignment service if workflow failed
+            if not best_driver:
+                print(f"   🧠 AI Agent: Calculating best driver match...")
+                best_driver = await assignment_service.find_best_driver(new_order, same_city_drivers)
             if best_driver:
                 print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
                 print(f"   📊 Rating: {best_driver['rating']}/5.0")
@@ -1025,7 +1041,7 @@ async def cancel_order(order_id: str, data: dict, current_admin: dict = Depends(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Remove from driver
+    # Remove from driver and update status
     if order.get("assigned_driver"):
         driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
         if driver and order_id in driver.get("current_orders", []):
@@ -1033,12 +1049,24 @@ async def cancel_order(order_id: str, data: dict, current_admin: dict = Depends(
             if not driver["current_orders"]:
                 driver["status"] = "available"
             storage.update_driver(driver["id"], driver)
+            
+            # Update in-memory list
+            for i, d in enumerate(drivers_db):
+                if d["id"] == driver["id"]:
+                    drivers_db[i] = driver
+                    break
     
     order["status"] = "cancelled"
     order["cancelled_at"] = datetime.now().isoformat()
     order["cancellation_reason"] = data.get("reason", "Admin cancellation")
     
     storage.update_order(order_id, order)
+    
+    # Update in-memory list
+    for i, o in enumerate(orders_db):
+        if o["id"] == order_id:
+            orders_db[i] = order
+            break
     
     return {"message": "Order cancelled successfully", "order": order}
 def get_all_orders(current_admin: dict = Depends(get_current_admin)):

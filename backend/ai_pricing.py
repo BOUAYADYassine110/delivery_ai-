@@ -2,6 +2,9 @@
 AI Pricing Integration Module
 Integrates CrewAI pricing agent into order creation and pricing calculations
 """
+from api.agents.pricing_agent import PricingAgent
+
+price_agent = PricingAgent()
 
 async def calculate_ai_price(weight: float, distance: float, service_type: str, is_inter_city: bool):
     """
@@ -17,10 +20,8 @@ async def calculate_ai_price(weight: float, distance: float, service_type: str, 
         dict with price, method, and optional ai_analysis
     """
     try:
-        from api.services.agent_service import AgentService
-        
         # Try AI pricing first
-        ai_result = await AgentService.calculate_price(weight, distance, service_type)
+        ai_result = await price_agent.calculate_price(weight, distance, service_type)
         if ai_result and 'price' in ai_result:
             # Adjust AI price based on delivery type
             base_ai_price = ai_result['price']
