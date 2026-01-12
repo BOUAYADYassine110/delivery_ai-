@@ -178,8 +178,8 @@ backend/core/config.py
 backend/core/database.py
 backend/core/websocket.py
 
-# Unused agents
-agents/
+# Unused agents (REMOVED - agents folder is now used)
+# agents/
 
 # Unused tasks
 tasks/
