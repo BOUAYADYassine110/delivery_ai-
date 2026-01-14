@@ -82,57 +82,61 @@ class DeliveryWorkflow:
             return await self._intra_city_workflow(order, drivers)
     
     async def _intra_city_workflow(self, order: dict, drivers: list):
-        """Intra-city delivery workflow"""
+        """Intra-city delivery workflow - SEQUENTIAL PIPELINE"""
         print("[WORKFLOW] Starting INTRA-CITY workflow...")
         
         if not AGENTS_LOADED or not self.llm:
-            print("[WORKFLOW] Using FALLBACK mode (agents not loaded or LLM unavailable)")
+            print("[WORKFLOW] Using FALLBACK mode")
             return self._fallback_intra_city(order, drivers)
         
-        print("[WORKFLOW] Using AI MODE with CrewAI agents")
-        print("[WORKFLOW] Agents will now collaborate...\n")
+        print("[WORKFLOW] Using AI MODE - Sequential pipeline with 5 agents\n")
         
         try:
-            # 1. Client Service Agent - Process order
-            client_task = Task(
-                description=f"Process intra-city order from {order['pickup_city']}",
+            # Task 1: Client Service validates order
+            task1 = Task(
+                description=f"Validate intra-city order from {order['pickup_city']} (weight: {order['weight']}kg). Confirm order is valid.",
                 agent=client_service_agent,
-                expected_output="Order validation and customer confirmation"
+                expected_output="Order validation status"
             )
             
-            # 2. Pricing Agent - Calculate price
-            pricing_task = Task(
-                description=f"Calculate price for {order['weight']}kg, {order['service_type']} service",
+            # Task 2: Pricing calculates cost (depends on task1)
+            task2 = Task(
+                description=f"Calculate price for {order['weight']}kg, {order['service_type']} service in {order['pickup_city']}.",
                 agent=intra_pricing_agent,
-                expected_output="Price calculation"
+                expected_output="Price calculation",
+                context=[task1]  # Depends on task1
             )
             
-            # 3. Courier Management - Assign driver
-            courier_task = Task(
-                description=f"Assign best driver from {len(drivers)} available drivers",
+            # Task 3: Courier Management assigns driver (depends on task2)
+            task3 = Task(
+                description=f"Assign best driver from {len(drivers)} available drivers. Return driver ID.",
                 agent=courier_management_agent,
-                expected_output="Driver assignment"
+                expected_output="Driver assignment",
+                context=[task2]  # Depends on task2
             )
             
-            # 4. Smart Routing - Plan route
-            routing_task = Task(
-                description=f"Plan optimal route in {order['pickup_city']}",
+            # Task 4: Smart Routing plans route (depends on task3)
+            task4 = Task(
+                description=f"Plan optimal route in {order['pickup_city']} for assigned driver.",
                 agent=smart_routing_agent,
-                expected_output="Route plan"
+                expected_output="Route plan",
+                context=[task3]  # Depends on task3
             )
             
-            # 5. Coordinator - Orchestrate
-            coord_task = Task(
-                description="Coordinate intra-city delivery workflow",
+            # Task 5: Coordinator finalizes (depends on task4)
+            task5 = Task(
+                description="Finalize intra-city delivery workflow and confirm all steps completed.",
                 agent=coordinator_agent,
-                expected_output="Workflow coordination"
+                expected_output="Workflow completion confirmation",
+                context=[task4]  # Depends on task4
             )
             
             crew = Crew(
                 agents=[client_service_agent, intra_pricing_agent, courier_management_agent, 
                        smart_routing_agent, coordinator_agent],
-                tasks=[client_task, pricing_task, courier_task, routing_task, coord_task],
-                verbose=True  # Enable verbose to see agent thinking
+                tasks=[task1, task2, task3, task4, task5],
+                verbose=True,
+                process="sequential"  # Sequential execution
             )
             
             result = crew.kickoff()
@@ -143,56 +147,64 @@ class DeliveryWorkflow:
                 "best_driver": drivers[0] if drivers else None,
                 "agents_used": ["client_service", "pricing", "courier_management", "routing", "coordinator"]
             }
-        except:
+        except Exception as e:
+            print(f"[WORKFLOW] Error: {e}")
             return self._fallback_intra_city(order, drivers)
     
     async def _inter_city_workflow(self, order: dict, drivers: list):
-        """Inter-city delivery workflow"""
+        """Inter-city delivery workflow - SEQUENTIAL PIPELINE"""
         if not AGENTS_LOADED or not self.llm:
             return self._fallback_inter_city(order, drivers)
         
+        print("[WORKFLOW] Using AI MODE - Sequential pipeline with 5 agents\n")
+        
         try:
-            # 1. Inter-City Coordinator - Orchestrate
-            coord_task = Task(
-                description=f"Coordinate inter-city delivery from {order['pickup_city']} to {order['delivery_city']}",
+            # Task 1: Coordinator plans workflow
+            task1 = Task(
+                description=f"Coordinate inter-city delivery from {order['pickup_city']} to {order['delivery_city']}. Plan workflow stages.",
                 agent=inter_city_coordinator_agent,
-                expected_output="Workflow coordination"
+                expected_output="Workflow plan"
             )
             
-            # 2. Warehouse Coordinator - Plan warehouse handling
-            warehouse_task = Task(
-                description=f"Coordinate warehouse operations for inter-city delivery",
+            # Task 2: Warehouse Coordinator plans warehouse operations (depends on task1)
+            task2 = Task(
+                description=f"Plan warehouse operations for inter-city delivery. Coordinate origin and destination warehouses.",
                 agent=warehouse_coordinator_agent,
-                expected_output="Warehouse plan"
+                expected_output="Warehouse coordination plan",
+                context=[task1]  # Depends on task1
             )
             
-            # 3. Transportation Coordinator - Plan transport
-            transport_task = Task(
-                description=f"Coordinate transportation between cities",
+            # Task 3: Transportation Coordinator schedules transport (depends on task2)
+            task3 = Task(
+                description=f"Schedule inter-city transportation between {order['pickup_city']} and {order['delivery_city']}.",
                 agent=transportation_coordinator_agent,
-                expected_output="Transport schedule"
+                expected_output="Transport schedule",
+                context=[task2]  # Depends on task2
             )
             
-            # 4. Inter-City Pricing - Calculate price
-            pricing_task = Task(
-                description=f"Calculate inter-city price for {order['weight']}kg",
+            # Task 4: Pricing calculates cost (depends on task3)
+            task4 = Task(
+                description=f"Calculate inter-city price for {order['weight']}kg delivery.",
                 agent=inter_city_pricing_agent,
-                expected_output="Price calculation"
+                expected_output="Price calculation",
+                context=[task3]  # Depends on task3
             )
             
-            # 5. Long Distance Routing - Plan route
-            routing_task = Task(
-                description=f"Plan long-distance route",
+            # Task 5: Routing plans long-distance route (depends on task4)
+            task5 = Task(
+                description=f"Plan long-distance route and assign driver from {len(drivers)} available drivers.",
                 agent=long_distance_routing_agent,
-                expected_output="Route plan"
+                expected_output="Route plan and driver assignment",
+                context=[task4]  # Depends on task4
             )
             
             crew = Crew(
                 agents=[inter_city_coordinator_agent, warehouse_coordinator_agent, 
                        transportation_coordinator_agent, inter_city_pricing_agent, 
                        long_distance_routing_agent],
-                tasks=[coord_task, warehouse_task, transport_task, pricing_task, routing_task],
-                verbose=True  # Enable verbose to see agent thinking
+                tasks=[task1, task2, task3, task4, task5],
+                verbose=True,
+                process="sequential"  # Sequential execution
             )
             
             result = crew.kickoff()
@@ -204,7 +216,8 @@ class DeliveryWorkflow:
                 "agents_used": ["inter_city_coordinator", "warehouse_coordinator", 
                                "transportation_coordinator", "inter_city_pricing", "long_distance_routing"]
             }
-        except:
+        except Exception as e:
+            print(f"[WORKFLOW] Error: {e}")
             return self._fallback_inter_city(order, drivers)
     
     def _fallback_intra_city(self, order, drivers):

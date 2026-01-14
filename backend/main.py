@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -42,11 +42,12 @@ except Exception as e:
     async def get_price_calculation(request): return None
 
 try:
-    from api.services.delivery_workflow import process_delivery_order, get_workflow_status
+    from api.services.delivery_workflow import process_delivery_order, get_workflow_status, AGENTS_LOADED
     WORKFLOW_AVAILABLE = True
 except Exception as e:
     print(f"⚠️  Workflow not available: {e}")
     WORKFLOW_AVAILABLE = False
+    AGENTS_LOADED = False
     async def process_delivery_order(order, drivers): return None
     def get_workflow_status(): return {"status": "unavailable"}
 
@@ -81,6 +82,57 @@ app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 # Initialize workflow managers after database definitions
 inter_city_workflow = None
 warehouse_manager = None
+
+# Background task for auto-assignment
+async def auto_assign_pending_orders():
+    """Background task to automatically assign pending orders when drivers become available"""
+    while True:
+        try:
+            await asyncio.sleep(30)  # Check every 30 seconds
+            refresh_data()
+            
+            # Find pending orders
+            pending_orders = [o for o in orders_db if o["status"] == "pending_assignment"]
+            
+            if pending_orders:
+                print(f"\n🔄 AUTO-ASSIGN: Found {len(pending_orders)} pending orders")
+                
+                for order in pending_orders:
+                    # Get available drivers in pickup city
+                    city_drivers = [d for d in drivers_db if 
+                                   d.get("status") in ["available", "online"] and 
+                                   d.get("assigned_city", "").lower() == order["pickup_city"].lower()]
+                    
+                    if city_drivers:
+                        print(f"   ✅ Found {len(city_drivers)} drivers for order {order['id']}")
+                        
+                        # Use smart assignment
+                        assignment_service = SmartAssignmentService()
+                        best_driver = await assignment_service.find_best_driver(order, city_drivers)
+                        
+                        if best_driver:
+                            order["assigned_driver"] = best_driver["id"]
+                            order["status"] = "assigned" if not order.get("is_inter_city") else "pending_acceptance"
+                            best_driver["current_orders"].append(order["id"])
+                            best_driver["status"] = "busy"
+                            
+                            # Save changes
+                            storage.update_order(order["id"], order)
+                            storage.update_driver(best_driver["id"], best_driver)
+                            
+                            # Update in-memory lists
+                            for i, o in enumerate(orders_db):
+                                if o["id"] == order["id"]:
+                                    orders_db[i] = order
+                                    break
+                            for i, d in enumerate(drivers_db):
+                                if d["id"] == best_driver["id"]:
+                                    drivers_db[i] = best_driver
+                                    break
+                            
+                            print(f"   ✅ Assigned to {best_driver['name']}")
+        except Exception as e:
+            print(f"❌ Auto-assign error: {e}")
 
 class LoginRequest(BaseModel):
     username: str
@@ -489,6 +541,12 @@ def get_user_orders(current_user: dict = Depends(get_current_client)):
     
     return user_orders
 
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on startup"""
+    asyncio.create_task(auto_assign_pending_orders())
+    print("✅ Background auto-assignment task started")
+
 @app.post("/api/orders")
 async def create_order(order: OrderCreate, current_user: dict = Depends(get_current_client)):
     import random
@@ -627,24 +685,39 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
                            d.get("assigned_city", "").lower() == order.pickup_city.lower()]
         
         print(f"   Analyzing {len(same_city_drivers)} drivers...")
-        if same_city_drivers:
-            # Try workflow agents first
+        if not same_city_drivers:
+            print(f"   ❌ No available drivers in {order.pickup_city}")
+            print(f"   ⏳ Order will be auto-assigned when driver becomes available")
+            new_order["status"] = "pending_assignment"
+            new_order["assignment_error"] = f"No available drivers in {order.pickup_city}"
+            storage.update_order(order_id, new_order)
+        else:
+            # Try workflow first with verbose output
             best_driver = None
-            if WORKFLOW_AVAILABLE:
+            if WORKFLOW_AVAILABLE and AGENTS_LOADED:
                 try:
-                    print(f"   🤖 AI Workflow: Processing intra-city delivery...")
+                    print(f"   🤖 AI Workflow: Starting with {len(same_city_drivers)} drivers...")
+                    print(f"   📢 VERBOSE MODE ENABLED - Watch agents work below:")
+                    print("   " + "="*50)
                     workflow_result = await process_delivery_order(new_order, same_city_drivers)
+                    print("   " + "="*50)
                     if workflow_result and "best_driver" in workflow_result:
                         best_driver = workflow_result["best_driver"]
                         new_order["ai_workflow"] = workflow_result.get("workflow")
                         new_order["agents_used"] = workflow_result.get("agents_used", [])
                         print(f"   ✅ Workflow completed with {len(workflow_result.get('agents_used', []))} agents")
+                    else:
+                        print(f"   ⚠️  Workflow returned no driver")
                 except Exception as e:
                     print(f"   ⚠️  Workflow error: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"   ⚠️  Workflow not available (WORKFLOW_AVAILABLE={WORKFLOW_AVAILABLE}, AGENTS_LOADED={AGENTS_LOADED})")
             
-            # Fallback to assignment service if workflow failed
+            # Fallback to assignment service
             if not best_driver:
-                print(f"   🧠 AI Agent: Calculating best driver match...")
+                print(f"   🧠 Fallback: Using assignment service...")
                 best_driver = await assignment_service.find_best_driver(new_order, same_city_drivers)
             if best_driver:
                 print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
@@ -672,47 +745,68 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
                 print(f"   ⚡ Status: AUTO-ACCEPTED & SAVED")
             else:
                 print(f"   ❌ No suitable driver found")
-        else:
-            print(f"   ⚠️  No available drivers in {order.pickup_city}")
+                new_order["status"] = "pending_assignment"
+                new_order["assignment_error"] = "No suitable driver available"
+                storage.update_order(order_id, new_order)
     else:
         print(f"\n🌍 INTER-CITY ASSIGNMENT (Manual Accept):")
-        # For inter-city: use existing workflow
-        best_driver = None
-        if WORKFLOW_AVAILABLE:
-            try:
-                print(f"   🤖 AI Workflow: Processing inter-city delivery...")
-                workflow_result = await process_delivery_order(new_order, city_drivers)
-                if workflow_result and "best_driver" in workflow_result:
-                    best_driver = workflow_result["best_driver"]
-                    new_order["ai_workflow"] = workflow_result.get("workflow")
-                    new_order["agents_used"] = workflow_result.get("agents_used", [])
-                    print(f"   ✅ Workflow completed")
-            except Exception as e:
-                print(f"   ⚠️  Workflow error: {e}")
-        
-        if not best_driver:
-            print(f"   🧠 AI Agent: Finding best driver...")
-            best_driver = await assignment_service.find_best_driver(new_order, city_drivers)
-        
-        if best_driver:
-            print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
-            print(f"   📊 Rating: {best_driver['rating']}/5.0")
-            new_order["assigned_driver"] = best_driver["id"]
-            new_order["status"] = "pending_acceptance"
-            new_order["assignment_attempts"] = 1
-            
-            # Save to storage IMMEDIATELY
+        if not city_drivers:
+            print(f"   ❌ No available drivers in {order.pickup_city}")
+            print(f"   ⏳ Order will be auto-assigned when driver becomes available")
+            new_order["status"] = "pending_assignment"
+            new_order["assignment_error"] = f"No available drivers in {order.pickup_city}"
             storage.update_order(order_id, new_order)
-            
-            # Update in-memory list
-            for i, o in enumerate(orders_db):
-                if o["id"] == order_id:
-                    orders_db[i] = new_order
-                    break
-            
-            print(f"   ⏳ Status: PENDING DRIVER ACCEPTANCE & SAVED")
         else:
-            print(f"   ❌ No suitable driver found")
+            # Try workflow first with verbose output
+            best_driver = None
+            if WORKFLOW_AVAILABLE and AGENTS_LOADED:
+                try:
+                    print(f"   🤖 AI Workflow: Starting with {len(city_drivers)} drivers...")
+                    print(f"   📢 VERBOSE MODE ENABLED - Watch agents work below:")
+                    print("   " + "="*50)
+                    workflow_result = await process_delivery_order(new_order, city_drivers)
+                    print("   " + "="*50)
+                    if workflow_result and "best_driver" in workflow_result:
+                        best_driver = workflow_result["best_driver"]
+                        new_order["ai_workflow"] = workflow_result.get("workflow")
+                        new_order["agents_used"] = workflow_result.get("agents_used", [])
+                        print(f"   ✅ Workflow completed with {len(workflow_result.get('agents_used', []))} agents")
+                    else:
+                        print(f"   ⚠️  Workflow returned no driver")
+                except Exception as e:
+                    print(f"   ⚠️  Workflow error: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"   ⚠️  Workflow not available (WORKFLOW_AVAILABLE={WORKFLOW_AVAILABLE}, AGENTS_LOADED={AGENTS_LOADED})")
+            
+            # Fallback to assignment service
+            if not best_driver:
+                print(f"   🧠 Fallback: Using assignment service...")
+                best_driver = await assignment_service.find_best_driver(new_order, city_drivers)
+            
+            if best_driver:
+                print(f"   ✅ Selected: {best_driver['name']} ({best_driver['vehicle_type']})")
+                print(f"   📊 Rating: {best_driver['rating']}/5.0")
+                new_order["assigned_driver"] = best_driver["id"]
+                new_order["status"] = "pending_acceptance"
+                new_order["assignment_attempts"] = 1
+                
+                # Save to storage IMMEDIATELY
+                storage.update_order(order_id, new_order)
+                
+                # Update in-memory list
+                for i, o in enumerate(orders_db):
+                    if o["id"] == order_id:
+                        orders_db[i] = new_order
+                        break
+                
+                print(f"   ⏳ Status: PENDING DRIVER ACCEPTANCE & SAVED")
+            else:
+                print(f"   ❌ No suitable driver found")
+                new_order["status"] = "pending_assignment"
+                new_order["assignment_error"] = "No suitable driver available"
+                storage.update_order(order_id, new_order)
     
     print("\n" + "="*60)
     print("✅ ORDER CREATED SUCCESSFULLY")

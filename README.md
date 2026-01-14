@@ -251,6 +251,10 @@ Our intelligent assignment system uses **5 key factors**:
 - **Assignment Agent**: Intelligent driver selection
 - **Routing Agent**: Optimal path calculation
 - **Tracking Agent**: Real-time monitoring
+- **Workflow Agents (10 total)**: Optional deep analysis (5 intra-city + 5 inter-city)
+  - Available via `/api/orders/{order_id}/analyze-workflow` endpoint
+  - Not used during order creation to maintain speed
+  - Can be triggered on-demand for optimization analysis
 
 ## 📊 System Capabilities
 
