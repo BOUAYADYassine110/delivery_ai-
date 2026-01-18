@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery } from 'react-query'
 import { api } from '../services/api'
 import { MapPin, Search, Package, Map, Clock, Navigation, Cloud } from 'lucide-react'
-import RouteMap from '../components/RouteMap'
+import RouteMap from '../components/StaticRouteMap'
 import PackageTracker from '../components/PackageTracker'
 import CustomerNavbar from '../components/CustomerNavbar'
 

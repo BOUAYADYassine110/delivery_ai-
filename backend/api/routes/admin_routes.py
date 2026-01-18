@@ -29,7 +29,8 @@ class DriverSuspend(BaseModel):
 @router.get("/dashboard/overview")
 def get_dashboard_overview(current_admin: dict = Depends(get_current_admin)):
     """Main dashboard statistics"""
-    from main import orders_db, drivers_db
+    from main import orders_db, drivers_db, refresh_data
+    refresh_data()
     
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -138,7 +139,8 @@ def get_all_orders(
     current_admin: dict = Depends(get_current_admin)
 ):
     """Get all orders with filters"""
-    from main import orders_db, drivers_db
+    from main import orders_db, drivers_db, refresh_data
+    refresh_data()
     
     filtered = orders_db.copy()
     
@@ -274,7 +276,8 @@ def get_all_drivers(
     current_admin: dict = Depends(get_current_admin)
 ):
     """Get all drivers with filters"""
-    from main import drivers_db, orders_db
+    from main import drivers_db, orders_db, refresh_data
+    refresh_data()
     
     filtered = drivers_db.copy()
     

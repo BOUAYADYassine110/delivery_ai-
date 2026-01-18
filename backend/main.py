@@ -1129,19 +1129,23 @@ async def manual_reassign_order(order_id: str, data: dict, current_admin: dict =
 
 @app.post("/api/admin/orders/{order_id}/cancel")
 async def cancel_order(order_id: str, data: dict, current_admin: dict = Depends(get_current_admin)):
-    """Cancel an order"""
+    """Cancel an order with automatic driver status update"""
     refresh_data()
     order = next((o for o in orders_db if o["id"] == order_id), None)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Remove from driver and update status
+    # Remove from driver and auto-update status via coordinator logic
     if order.get("assigned_driver"):
         driver = next((d for d in drivers_db if d["id"] == order["assigned_driver"]), None)
         if driver and order_id in driver.get("current_orders", []):
             driver["current_orders"].remove(order_id)
+            
+            # Coordinator agent logic: Auto-update status if no orders
             if not driver["current_orders"]:
                 driver["status"] = "available"
+                print(f"🤖 Coordinator: Driver {driver['name']} auto-updated to 'available' (no orders)")
+            
             storage.update_driver(driver["id"], driver)
             
             # Update in-memory list
@@ -1163,6 +1167,32 @@ async def cancel_order(order_id: str, data: dict, current_admin: dict = Depends(
             break
     
     return {"message": "Order cancelled successfully", "order": order}
+
+@app.post("/api/admin/reset-system")
+async def reset_system(current_admin: dict = Depends(get_current_admin)):
+    """Clear all orders and reset all driver statuses"""
+    global orders_db, drivers_db
+    
+    # Clear all orders
+    orders_db.clear()
+    storage.orders.clear()
+    
+    # Reset all drivers
+    for driver in drivers_db:
+        driver["current_orders"] = []
+        driver["status"] = "available"
+        storage.update_driver(driver["id"], driver)
+    
+    print("🔄 System reset: All orders cleared, all drivers set to available")
+    
+    return {
+        "message": "System reset successfully",
+        "orders_cleared": True,
+        "drivers_reset": len(drivers_db),
+        "all_drivers_available": True
+    }
+
+@app.get("/api/admin/orders")
 def get_all_orders(current_admin: dict = Depends(get_current_admin)):
     # Fetch fresh data from storage
     all_orders = storage.get_orders()
@@ -1181,6 +1211,7 @@ def get_all_orders(current_admin: dict = Depends(get_current_admin)):
         enriched_orders.append(enriched_order)
     
     return {"orders": enriched_orders, "total": len(enriched_orders)}
+
 
 @app.get("/api/admin/analytics")
 def get_admin_analytics(current_admin: dict = Depends(get_current_admin)):

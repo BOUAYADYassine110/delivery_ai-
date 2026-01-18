@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { X, Loader, AlertCircle, CheckCircle, TrendingUp, Users, Package, DollarSign, Eye, Play } from 'lucide-react';
+import { X, Loader, AlertCircle, CheckCircle, TrendingUp, Users, Package, DollarSign, Eye, Play, Warehouse, MapPin, Phone, User } from 'lucide-react';
 import AdminNavbar from '../components/AdminNavbar';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 
@@ -768,54 +768,50 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Warehouse Management Modal */}
+        {/* Modern Warehouse Management Modal */}
         {showWarehouseModal && selectedWarehouse && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-indigo-600">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-xl font-bold text-white">🏪 {selectedWarehouse.name}</h3>
-                    <p className="text-purple-100 text-sm mt-1">{selectedWarehouse.city}</p>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+              {/* Header */}
+              <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white p-6 rounded-t-2xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Warehouse size={24} />
+                    <h2 className="text-xl font-bold">Manage Warehouse</h2>
                   </div>
-                  <button onClick={() => setShowWarehouseModal(false)} className="text-white hover:text-gray-200 transition-colors">
-                    <X size={24} />
+                  <button onClick={() => setShowWarehouseModal(false)} className="p-1 hover:bg-white/20 rounded-lg transition-colors">
+                    <X size={20} />
                   </button>
                 </div>
+                <p className="text-purple-100 text-sm mt-2">{selectedWarehouse.city}</p>
               </div>
-              <div className="p-6 space-y-6">
+              {/* Content */}
+              <div className="p-6 space-y-5">
+                {/* Status Badge */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium text-gray-700">Status</span>
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                    selectedWarehouse.status === 'operational' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}>
+                    {selectedWarehouse.status}
+                  </span>
+                </div>
+
+                {/* Capacity Stats */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <label className="text-sm font-medium text-gray-700">City</label>
-                    <p className="text-lg font-semibold text-gray-900 mt-1">{selectedWarehouse.city}</p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-blue-700 mb-1">
+                      <Package size={16} />
+                      <span className="text-xs font-medium">Current</span>
+                    </div>
+                    <p className="text-2xl font-bold text-blue-900">{selectedWarehouse.current_packages || 0}</p>
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <label className="text-sm font-medium text-gray-700">Status</label>
-                    <p className={`text-lg font-semibold mt-1 ${
-                      selectedWarehouse.status === 'operational' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {selectedWarehouse.status}
-                    </p>
-                  </div>
-                  <div className="col-span-2 bg-gray-50 p-4 rounded-lg">
-                    <label className="text-sm font-medium text-gray-700">Address</label>
-                    <p className="text-gray-900 mt-1">{selectedWarehouse.address}</p>
-                  </div>
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <label className="text-sm font-medium text-blue-700">Current Packages</label>
-                    <p className="text-2xl font-bold text-blue-900 mt-1">{selectedWarehouse.current_packages || 0}</p>
-                  </div>
-                  <div className="bg-purple-50 p-4 rounded-lg">
-                    <label className="text-sm font-medium text-purple-700">Capacity</label>
-                    <p className="text-2xl font-bold text-purple-900 mt-1">{selectedWarehouse.capacity}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <label className="text-sm font-medium text-gray-700">Manager</label>
-                    <p className="text-gray-900 mt-1">{selectedWarehouse.manager || 'N/A'}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <label className="text-sm font-medium text-gray-700">Phone</label>
-                    <p className="text-gray-900 mt-1">{selectedWarehouse.phone || 'N/A'}</p>
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-purple-700 mb-1">
+                      <TrendingUp size={16} />
+                      <span className="text-xs font-medium">Capacity</span>
+                    </div>
+                    <p className="text-2xl font-bold text-purple-900">{selectedWarehouse.capacity}</p>
                   </div>
                 </div>
                 
@@ -838,25 +834,51 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
+                {/* Contact Info */}
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <User size={18} className="text-gray-500 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-gray-600">Manager</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedWarehouse.manager || 'N/A'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <Phone size={18} className="text-gray-500 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-gray-600">Phone</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedWarehouse.phone || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <MapPin size={20} className="text-blue-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-900">Location</p>
+                      <p className="text-sm text-blue-700 mt-1">{selectedWarehouse.address}</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t border-gray-200">
-                  <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <TrendingUp size={20} />
-                    Quick Actions
-                  </h4>
+                  <h4 className="font-semibold text-gray-900 mb-3 text-sm">Quick Actions</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <button 
                       onClick={() => handleUpdateWarehouse(selectedWarehouse.id, 'operational')}
                       disabled={selectedWarehouse.status === 'operational'}
-                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors shadow-md hover:shadow-lg"
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
                     >
-                      ✅ Mark Operational
+                      ✅ Operational
                     </button>
                     <button 
                       onClick={() => handleUpdateWarehouse(selectedWarehouse.id, 'closed')}
                       disabled={selectedWarehouse.status === 'closed'}
                       className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors shadow-md hover:shadow-lg"
                     >
-                      🚫 Mark Closed
+                      🚫 Closed
                     </button>
                   </div>
                 </div>
@@ -877,3 +899,4 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+

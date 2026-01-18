@@ -57,6 +57,10 @@ if USE_MONGODB:
         print("[MongoDB] Seeded with 16 drivers, 6 warehouses, 1 test user")
     
     class MongoDBStorage:
+        # Expose collections for direct access
+        orders = orders_col
+        drivers = drivers_col
+        
         @staticmethod
         def get_users():
             return [clean_mongo_doc(u) for u in users_col.find({})]
