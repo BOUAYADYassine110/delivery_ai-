@@ -8,7 +8,7 @@ price_agent = PricingAgent()
 
 async def calculate_ai_price(weight: float, distance: float, service_type: str, is_inter_city: bool):
     """
-    Calculate price using AI agent with fallback to formula
+    Calculate price using AI agent with fallback to formula - MOROCCAN MARKET RATES
     
     Args:
         weight: Package weight in kg
@@ -23,17 +23,17 @@ async def calculate_ai_price(weight: float, distance: float, service_type: str, 
         # Try AI pricing first
         ai_result = await price_agent.calculate_price(weight, distance, service_type)
         if ai_result and 'price' in ai_result:
-            # Adjust AI price based on delivery type
+            # Adjust AI price based on delivery type - MOROCCAN RATES
             base_ai_price = ai_result['price']
             
             if is_inter_city:
-                # Scale up for inter-city
-                adjusted_price = base_ai_price * 2.5 + distance * 0.6
+                # Reasonable inter-city pricing for Morocco
+                adjusted_price = base_ai_price * 0.8 + distance * 0.3  # 0.3 MAD per km
             else:
                 # Keep intra-city reasonable
-                adjusted_price = base_ai_price * 1.2
+                adjusted_price = base_ai_price * 1.0
             
-            service_multiplier = {'standard': 1.0, 'express': 1.5}.get(service_type, 1.0)
+            service_multiplier = {'standard': 1.0, 'express': 1.3}.get(service_type, 1.0)
             final_price = adjusted_price * service_multiplier
             
             return {
@@ -44,17 +44,17 @@ async def calculate_ai_price(weight: float, distance: float, service_type: str, 
     except Exception as e:
         print(f"AI pricing failed: {e}")
     
-    # Fallback to formula-based pricing
+    # Fallback to formula-based pricing - MOROCCAN RATES
     if is_inter_city:
-        base_price = 50.0
-        distance_cost = distance * 0.6
-        weight_cost = weight * 4.0
+        base_price = 30.0  # MAD
+        distance_cost = distance * 0.3  # 0.3 MAD per km
+        weight_cost = weight * 2.0  # 2 MAD per kg
     else:
-        base_price = 15.0
+        base_price = 15.0  # MAD
         distance_cost = 10.0
         weight_cost = weight * 2.0
     
-    service_multiplier = {'standard': 1.0, 'express': 1.5}.get(service_type, 1.0)
+    service_multiplier = {'standard': 1.0, 'express': 1.3}.get(service_type, 1.0)
     fallback_price = (base_price + distance_cost + weight_cost) * service_multiplier
     
     return {

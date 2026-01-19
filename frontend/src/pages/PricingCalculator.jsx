@@ -44,11 +44,11 @@ export default function PricingCalculator() {
       const basePrice = result.price
       setAiPowered(result.method === 'ai_agent')
       
-      // Calculate additional fees
+      // Calculate additional fees - MOROCCAN RATES
       const volume = (parseFloat(formData.length) * parseFloat(formData.width) * parseFloat(formData.height)) / 1000000
-      const volumeCost = volume * 50
-      const insuranceFee = parseFloat(formData.insurance_value) * 0.02
-      const fragileFee = formData.fragile ? 25 : 0
+      const volumeCost = volume * 5  // Reduced from 50 to 5 MAD per cubic meter
+      const insuranceFee = parseFloat(formData.insurance_value) * 0.01  // Reduced from 0.02 to 0.01
+      const fragileFee = formData.fragile ? 15 : 0  // Reduced from 25 to 15
       
       const total = basePrice + volumeCost + insuranceFee + fragileFee
       
@@ -68,14 +68,14 @@ export default function PricingCalculator() {
       })
     } catch (error) {
       console.error('Price calculation error:', error)
-      // Fallback to local calculation
-      const basePrice = isInterCity ? 80 : 25
-      const weightCost = isInterCity ? weight * 8 : weight * 3
+      // Fallback to local calculation - MOROCCAN RATES
+      const basePrice = isInterCity ? 30 : 15  // MAD
+      const weightCost = weight * 2  // 2 MAD per kg
       const volume = (parseFloat(formData.length) * parseFloat(formData.width) * parseFloat(formData.height)) / 1000000
-      const volumeCost = volume * 50
-      const insuranceFee = parseFloat(formData.insurance_value) * 0.02
-      const fragileFee = formData.fragile ? 25 : 0
-      const serviceMultiplier = formData.service_type === 'express' ? 1.5 : 1.0
+      const volumeCost = volume * 5  // 5 MAD per cubic meter
+      const insuranceFee = parseFloat(formData.insurance_value) * 0.01  // 1%
+      const fragileFee = formData.fragile ? 15 : 0  // 15 MAD
+      const serviceMultiplier = formData.service_type === 'express' ? 1.3 : 1.0  // Reduced from 1.5
       const subtotal = basePrice + weightCost + volumeCost + insuranceFee + fragileFee
       const total = subtotal * serviceMultiplier
       

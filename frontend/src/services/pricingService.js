@@ -56,16 +56,16 @@ export const pricingService = {
         orderData.service_type
       )
       
-      // Add additional fees
+      // Add additional fees - MOROCCAN RATES
       let additionalFees = 0
       
       if (isInterCity) {
-        if (orderData.pickup_option === 'warehouse_dropoff') additionalFees += 15
-        if (orderData.delivery_option === 'warehouse_pickup') additionalFees += 15
+        if (orderData.pickup_option === 'warehouse_dropoff') additionalFees += 10  // Reduced from 15
+        if (orderData.delivery_option === 'warehouse_pickup') additionalFees += 10  // Reduced from 15
       }
       
-      if (orderData.fragile) additionalFees += 25
-      if (orderData.insurance_value) additionalFees += orderData.insurance_value * 0.02
+      if (orderData.fragile) additionalFees += 15  // Reduced from 25
+      if (orderData.insurance_value) additionalFees += orderData.insurance_value * 0.01  // Reduced from 0.02
       
       const total = result.price + additionalFees
       
@@ -77,9 +77,9 @@ export const pricingService = {
         aiAnalysis: result.aiAnalysis,
         breakdown: {
           aiCalculated: result.price,
-          warehouseFees: isInterCity ? (orderData.pickup_option === 'warehouse_dropoff' ? 15 : 0) + (orderData.delivery_option === 'warehouse_pickup' ? 15 : 0) : 0,
-          fragileFee: orderData.fragile ? 25 : 0,
-          insuranceFee: orderData.insurance_value ? orderData.insurance_value * 0.02 : 0
+          warehouseFees: isInterCity ? (orderData.pickup_option === 'warehouse_dropoff' ? 10 : 0) + (orderData.delivery_option === 'warehouse_pickup' ? 10 : 0) : 0,
+          fragileFee: orderData.fragile ? 15 : 0,
+          insuranceFee: orderData.insurance_value ? orderData.insurance_value * 0.01 : 0
         }
       }
     } catch (error) {
@@ -90,16 +90,16 @@ export const pricingService = {
 }
 
 /**
- * Fallback price calculation (client-side)
+ * Fallback price calculation (client-side) - MOROCCAN RATES
  */
 function calculateFallbackPrice(pickupCity, deliveryCity, weight, serviceType) {
   const isInterCity = pickupCity !== deliveryCity
   
-  let basePrice = isInterCity ? 50 : 15
-  let weightCost = isInterCity ? weight * 4 : weight * 2
-  let distanceCost = isInterCity ? 20 : 10
+  let basePrice = isInterCity ? 30 : 15  // MAD
+  let weightCost = weight * 2  // 2 MAD per kg
+  let distanceCost = isInterCity ? 15 : 10  // Reduced inter-city distance cost
   
-  const serviceMultiplier = serviceType === 'express' ? 1.5 : 1.0
+  const serviceMultiplier = serviceType === 'express' ? 1.3 : 1.0  // Reduced from 1.5
   
   return Math.round((basePrice + weightCost + distanceCost) * serviceMultiplier * 100) / 100
 }

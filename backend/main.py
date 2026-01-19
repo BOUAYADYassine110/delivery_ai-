@@ -570,21 +570,21 @@ async def create_order(order: OrderCreate, current_user: dict = Depends(get_curr
     print(f"📍 Type: {'INTER-CITY' if is_inter_city else 'INTRA-CITY'}")
     
     if is_inter_city:
-        # Inter-city pricing
-        base_price = 50.0  # MAD (reduced from 80)
-        distance_cost = calculate_inter_city_distance(order.pickup_city, order.delivery_city) * 0.6  # Reduced from 0.8
-        weight_cost = order.weight * 4.0  # Reduced from 5.0
-        dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000 * 1.5  # Reduced from 2.0
-        warehouse_fee = 15.0 if order.delivery_type != "door_to_door" else 0
+        # Inter-city pricing - REASONABLE for Morocco
+        base_price = 30.0  # MAD base (reduced from 50)
+        distance_cost = calculate_inter_city_distance(order.pickup_city, order.delivery_city) * 0.3  # 0.3 MAD per km
+        weight_cost = order.weight * 2.0  # 2 MAD per kg
+        dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000000 * 5  # 5 MAD per cubic meter (was /1000)
+        warehouse_fee = 10.0 if order.delivery_type != "door_to_door" else 0
     else:
         # Intra-city pricing - REDUCED for Morocco
         base_price = 15.0  # MAD (reduced from 25)
         distance_cost = 10.0  # Reduced from 15
         weight_cost = order.weight * 2.0  # Reduced from 3.0
-        dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000 * 1.0  # Reduced from 1.5
+        dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000000 * 5  # 5 MAD per cubic meter (was /1000)
         warehouse_fee = 0
     
-    service_multiplier = {"standard": 1.0, "express": 1.5}.get(order.service_type, 1.0)  # Reduced express from 1.8 to 1.5
+    service_multiplier = {"standard": 1.0, "express": 1.3}.get(order.service_type, 1.0)  # Reduced express multiplier
     total_cost = (base_price + distance_cost + weight_cost + dimension_cost + warehouse_fee) * service_multiplier
     
     print(f"\n💰 PRICING CALCULATION:")
@@ -964,7 +964,7 @@ async def auto_reassign_order(order_id: str, current_admin: dict = Depends(get_c
     """AI Agent-powered automatic order reassignment"""
     import sys
     sys.stdout.flush()
-    print(f"\n?? AI REASSIGN REQUEST for order {order_id}", flush=True)
+    print(f"\nAI REASSIGN REQUEST for order {order_id}", flush=True)
     refresh_data()
     order = next((o for o in orders_db if o["id"] == order_id), None)
     if not order:
@@ -985,29 +985,29 @@ async def auto_reassign_order(order_id: str, current_admin: dict = Depends(get_c
     
     if CREW_AVAILABLE:
         try:
-            print("   ?? Calling AI Agent...")
+            print("   Calling AI Agent...")
             agent_service = AgentService()
             result = await agent_service.recommend_driver(order, city_drivers)
             
             if result and result.get("driver"):
                 best_driver = result["driver"]
                 ai_reasoning = result.get("ai_reasoning", "AI analysis")
-                print(f"   ? AI Agent selected: {best_driver['name']}")
-                print(f"   ?? AI Reasoning: {ai_reasoning}")
+                print(f"   AI Agent selected: {best_driver['name']}")
+                print(f"   AI Reasoning: {ai_reasoning}")
             else:
-                print("   ?? AI Agent returned no driver, using fallback")
+                print("   AI Agent returned no driver, using fallback")
                 assignment_service = SmartAssignmentService()
                 best_driver = await assignment_service.find_best_driver(order, city_drivers)
                 ai_reasoning = "Fallback to algorithm"
         except Exception as e:
-            print(f"   ? AI Agent failed: {e}")
+            print(f"   AI Agent failed: {e}")
             import traceback
             traceback.print_exc()
             assignment_service = SmartAssignmentService()
             best_driver = await assignment_service.find_best_driver(order, city_drivers)
             ai_reasoning = f"Fallback to algorithm (Error: {str(e)})"
     else:
-        print("   ?? CrewAI not available, using algorithm")
+        print("   CrewAI not available, using algorithm")
         assignment_service = SmartAssignmentService()
         best_driver = await assignment_service.find_best_driver(order, city_drivers)
         ai_reasoning = "Algorithm-based (CrewAI unavailable)"
@@ -1036,7 +1036,7 @@ async def auto_reassign_order(order_id: str, current_admin: dict = Depends(get_c
     storage.update_order(order_id, order)
     storage.update_driver(best_driver["id"], best_driver)
     
-    print(f"   ? Reassignment complete\n")
+    print(f"   Reassignment complete\n")
     
     return {
         "message": f"Order reassigned to {best_driver['name']} by AI Agent",
@@ -1827,7 +1827,7 @@ def update_delivery_status(order_id: str, update: DeliveryUpdate):
     
     # If delivered, free up driver and send notification to customer
     if update.status == "delivered" and old_status != "delivered":
-        print(f"\n?? SENDING DELIVERY NOTIFICATION for order {order_id}")
+        print(f"\nSENDING DELIVERY NOTIFICATION for order {order_id}")
         print(f"   User ID: {order.get('user_id')}")
         print(f"   Tracking: {order.get('tracking_number', order_id)}")
         
@@ -1843,7 +1843,7 @@ def update_delivery_status(order_id: str, update: DeliveryUpdate):
             "id": f"notif_{order_id}_{int(datetime.now().timestamp() * 1000)}",
             "user_id": order.get("user_id"),
             "type": "delivery_completed",
-            "title": "?? Package Delivered!",
+            "title": "Package Delivered!",
             "message": f"Your package (Tracking: {order.get('tracking_number', order_id)}) has been delivered successfully.",
             "order_id": order_id,
             "read": False,
@@ -1852,7 +1852,7 @@ def update_delivery_status(order_id: str, update: DeliveryUpdate):
         notifications_db.append(notification)
         storage.add_notification(notification)
         
-        print(f"   ? Notification created: {notification['id']}")
+        print(f"   Notification created: {notification['id']}")
         print(f"   Total notifications in DB: {len(notifications_db)}")
     
     return {"message": "Status updated", "order": order}
@@ -2045,6 +2045,35 @@ def get_weather(city: str):
         "impact_on_delivery": random.choice(["None", "Minimal", "Moderate"])
     }
 
+@app.get("/api/traffic/{city}")
+def get_traffic(city: str):
+    """Get traffic conditions for a city"""
+    import random
+    from datetime import datetime
+    
+    # Simulate realistic traffic based on time of day
+    hour = datetime.now().hour
+    
+    # Rush hours: 7-9 AM and 5-7 PM
+    if (7 <= hour <= 9) or (17 <= hour <= 19):
+        traffic_levels = ['moderate', 'heavy', 'heavy']
+    # Night time: 10 PM - 6 AM
+    elif hour >= 22 or hour <= 6:
+        traffic_levels = ['light', 'light', 'light']
+    # Normal hours
+    else:
+        traffic_levels = ['light', 'moderate', 'moderate']
+    
+    level = random.choice(traffic_levels)
+    
+    return {
+        "city": city,
+        "level": level,
+        "description": f"{level.capitalize()} traffic conditions",
+        "delay_factor": 1.0 if level == 'light' else 1.3 if level == 'moderate' else 1.6,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.post("/api/routing/optimize")
 async def optimize_route(route_request: dict):
     """Generate optimized route using OSRM public endpoint"""
@@ -2205,25 +2234,24 @@ async def create_inter_city_order(order: InterCityOrderCreate, current_user: dic
     order_id = f"IC{random.randint(1000, 9999)}"
     tracking_number = f"IC{random.randint(100, 999)}"
     
-    # Enhanced inter-city pricing
-    base_price = 80.0  # MAD
-    distance_cost = calculate_inter_city_distance(order.pickup_city, order.delivery_city) * 1.2
-    weight_cost = order.weight * 8.0
-    dimension_cost = (order.dimensions["length"] * order.dimensions["width"] * order.dimensions["height"]) / 1000 * 3.0
+    # Use standard pricing formula (same as /api/pricing/calculate)
+    base_price = 30.0  # MAD
+    distance_cost = calculate_inter_city_distance(order.pickup_city, order.delivery_city) * 0.3  # 0.3 MAD per km
+    weight_cost = order.weight * 2.0  # 2 MAD per kg
+    service_multiplier = {"standard": 1.0, "express": 1.3}.get(order.service_type, 1.0)
     
-    # Warehouse fees
-    warehouse_fee = 0
+    # Calculate base total
+    total_cost = (base_price + distance_cost + weight_cost) * service_multiplier
+    
+    # Add optional fees
     if order.pickup_option == "warehouse_dropoff":
-        warehouse_fee += 15.0
+        total_cost += 10.0
     if order.delivery_option == "warehouse_pickup":
-        warehouse_fee += 15.0
-    
-    # Insurance and fragile handling
-    insurance_fee = order.insurance_value * 0.02 if order.insurance_value > 0 else 0
-    fragile_fee = 25.0 if order.fragile else 0
-    
-    service_multiplier = {"standard": 1.0, "express": 2.2}.get(order.service_type, 1.0)
-    total_cost = (base_price + distance_cost + weight_cost + dimension_cost + warehouse_fee + insurance_fee + fragile_fee) * service_multiplier
+        total_cost += 10.0
+    if order.fragile:
+        total_cost += 15.0
+    if order.insurance_value > 0:
+        total_cost += order.insurance_value * 0.01
     
     # Estimate delivery time
     delivery_days = 2 if order.service_type == "standard" else 1
@@ -2392,15 +2420,15 @@ def calculate_pricing_get(pickup_city: str, delivery_city: str, weight: float = 
     is_inter_city = pickup_city.lower() != delivery_city.lower()
     
     if is_inter_city:
-        base_price = 50.0
-        distance_cost = calculate_inter_city_distance(pickup_city, delivery_city) * 0.6
-        weight_cost = weight * 4.0
+        base_price = 30.0  # MAD
+        distance_cost = calculate_inter_city_distance(pickup_city, delivery_city) * 0.3  # 0.3 MAD per km
+        weight_cost = weight * 2.0  # 2 MAD per kg
     else:
-        base_price = 15.0
+        base_price = 15.0  # MAD
         distance_cost = 10.0
         weight_cost = weight * 2.0
     
-    service_multiplier = {"standard": 1.0, "express": 1.5}.get(service_type, 1.0)
+    service_multiplier = {"standard": 1.0, "express": 1.3}.get(service_type, 1.0)
     total_cost = (base_price + distance_cost + weight_cost) * service_multiplier
     
     return {
@@ -2424,15 +2452,15 @@ def calculate_pricing(data: dict):
     is_inter_city = pickup_city.lower() != delivery_city.lower()
     
     if is_inter_city:
-        base_price = 50.0
-        distance_cost = calculate_inter_city_distance(pickup_city, delivery_city) * 0.8
-        weight_cost = weight * 5.0
+        base_price = 30.0  # MAD
+        distance_cost = calculate_inter_city_distance(pickup_city, delivery_city) * 0.3
+        weight_cost = weight * 2.0
     else:
-        base_price = 25.0
-        distance_cost = 15.0
-        weight_cost = weight * 3.0
+        base_price = 15.0  # MAD
+        distance_cost = 10.0
+        weight_cost = weight * 2.0
     
-    service_multiplier = {"standard": 1.0, "express": 1.8}.get(service_type, 1.0)
+    service_multiplier = {"standard": 1.0, "express": 1.3}.get(service_type, 1.0)
     total_cost = (base_price + distance_cost + weight_cost) * service_multiplier
     
     return {
@@ -2452,7 +2480,7 @@ notifications_db = []
 def get_notifications(current_user: dict = Depends(get_current_client)):
     """Get notifications for current user"""
     user_id = current_user["id"]
-    print(f"\n?? FETCHING NOTIFICATIONS for user: {user_id}")
+    print(f"\nFETCHING NOTIFICATIONS for user: {user_id}")
     
     # Refresh data from storage
     refresh_data()

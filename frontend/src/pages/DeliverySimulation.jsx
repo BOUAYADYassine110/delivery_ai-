@@ -62,12 +62,29 @@ export default function DeliverySimulation() {
       setDriver(data.driver)
       
       if (data.order && data.order.pickup_city) {
+        try {
         const weatherRes = await fetch(`http://localhost:8001/api/weather/${data.order.pickup_city}`)
-        const weatherData = await weatherRes.json()
-        setWeather(weatherData)
+        if (weatherRes.ok) {
+          const weatherData = await weatherRes.json()
+          setWeather(weatherData)
+        }
+      } catch (err) {
+        console.log('Weather API unavailable')
+      }
       }
       
-      setTraffic(['light', 'moderate', 'heavy'][Math.floor(Math.random() * 3)])
+      // Fetch real traffic data
+      try {
+        const trafficRes = await fetch(`http://localhost:8001/api/traffic/${data.order.pickup_city}`)
+        if (trafficRes.ok) {
+          const trafficData = await trafficRes.json()
+          setTraffic(trafficData.level || 'moderate')
+        } else {
+          setTraffic(['light', 'moderate', 'heavy'][Math.floor(Math.random() * 3)])
+        }
+      } catch (err) {
+        setTraffic(['light', 'moderate', 'heavy'][Math.floor(Math.random() * 3)])
+      }
     } catch (error) {
       console.error('Error fetching order:', error)
     }
@@ -185,35 +202,39 @@ export default function DeliverySimulation() {
     await updateOrderStatus('en_route_to_pickup')
     const toPickupRoute = await fetchRouteOSRM(originWarehouse, pickupCoords)
     drawSingleRoute(toPickupRoute.coordinates, map, 'blue')
-    await animateAlongRoute(dMarker, toPickupRoute.coordinates)
-    totalDistance += parseFloat(toPickupRoute.distance) || 0
+    const dist1 = Number(toPickupRoute.distance) || 0
+    totalDistance += dist1
     totalDuration += toPickupRoute.duration || 0
+    setRouteMetrics({ distance: parseFloat(totalDistance.toFixed(1)), duration: totalDuration })
+    await animateAlongRoute(dMarker, toPickupRoute.coordinates)
 
     // Phase 2: At Pickup
     addEvent('Driver arrived at pickup location', 'success')
     await updateOrderStatus('at_pickup')
-    await sleep(2000)
+    await sleep(1000)
     addEvent('Package picked up', 'success')
     await updateOrderStatus('picked_up')
-    await sleep(2000)
+    await sleep(1000)
 
     // Phase 3: Pickup to Origin Warehouse (use OSRM)
     addEvent(`Returning to ${order.pickup_city} warehouse`, 'info')
     await updateOrderStatus('returning_to_warehouse')
     const backToWarehouseRoute = await fetchRouteOSRM(pickupCoords, originWarehouse)
     drawSingleRoute(backToWarehouseRoute.coordinates, map, 'orange')
-    await animateAlongRoute(dMarker, backToWarehouseRoute.coordinates)
-    totalDistance += parseFloat(backToWarehouseRoute.distance) || 0
+    const dist2 = Number(backToWarehouseRoute.distance) || 0
+    totalDistance += dist2
     totalDuration += backToWarehouseRoute.duration || 0
+    setRouteMetrics({ distance: parseFloat(totalDistance.toFixed(1)), duration: totalDuration })
+    await animateAlongRoute(dMarker, backToWarehouseRoute.coordinates)
 
     // Phase 4: At Origin Warehouse
     addEvent(`Package at ${order.pickup_city} warehouse`, 'success')
     await updateOrderStatus('at_origin_warehouse')
-    await sleep(3000)
+    await sleep(1500)
 
     // Phase 5: Inter-city truck transport (use OSRM)
     addEvent('Loading package onto inter-city truck', 'info')
-    await sleep(2000)
+    await sleep(1000)
     
     // Create truck marker
     const truckMarker = window.L.marker([originWarehouse.lat, originWarehouse.lng], {
@@ -225,14 +246,16 @@ export default function DeliverySimulation() {
     await updateOrderStatus('in_transit_inter_city')
     const interCityRoute = await fetchRouteOSRM(originWarehouse, destWarehouse)
     drawSingleRoute(interCityRoute.coordinates, map, 'red')
-    await animateAlongRoute(truckMarker, interCityRoute.coordinates)
-    totalDistance += parseFloat(interCityRoute.distance) || 0
+    const dist3 = Number(interCityRoute.distance) || 0
+    totalDistance += dist3
     totalDuration += interCityRoute.duration || 0
+    setRouteMetrics({ distance: parseFloat(totalDistance.toFixed(1)), duration: totalDuration })
+    await animateAlongRoute(truckMarker, interCityRoute.coordinates)
 
     // Phase 6: At Destination Warehouse
     addEvent(`Package arrived at ${order.delivery_city} warehouse`, 'success')
     await updateOrderStatus('at_destination_warehouse')
-    await sleep(3000)
+    await sleep(1500)
     truckMarker.remove()
 
     // Check delivery option
@@ -240,11 +263,10 @@ export default function DeliverySimulation() {
       addEvent('Package ready for customer pickup at warehouse', 'success')
       await updateOrderStatus('delivered')
       setSimulationStatus('completed')
-      setRouteMetrics({ distance: totalDistance, duration: totalDuration })
     } else {
       // Phase 7: Final delivery to door (use OSRM)
       addEvent('Assigning final delivery driver', 'info')
-      await sleep(2000)
+      await sleep(1000)
       
       const finalDriver = window.L.marker([destWarehouse.lat, destWarehouse.lng], {
         icon: createCustomIcon('🚗', 'orange')
@@ -254,14 +276,15 @@ export default function DeliverySimulation() {
       await updateOrderStatus('out_for_delivery')
       const finalRoute = await fetchRouteOSRM(destWarehouse, deliveryCoords)
       drawSingleRoute(finalRoute.coordinates, map, 'green')
-      await animateAlongRoute(finalDriver, finalRoute.coordinates)
-      totalDistance += parseFloat(finalRoute.distance) || 0
+      const dist4 = Number(finalRoute.distance) || 0
+      totalDistance += dist4
       totalDuration += finalRoute.duration || 0
+      setRouteMetrics({ distance: parseFloat(totalDistance.toFixed(1)), duration: totalDuration })
+      await animateAlongRoute(finalDriver, finalRoute.coordinates)
 
       addEvent('Package delivered to customer door!', 'success')
       await updateOrderStatus('delivered')
       setSimulationStatus('completed')
-      setRouteMetrics({ distance: totalDistance, duration: totalDuration })
     }
     
     setTimeout(() => fetchOrderData(), 1000)
@@ -297,20 +320,23 @@ export default function DeliverySimulation() {
     drawSingleRoute(toDeliveryRoute.coordinates, map, 'green')
     
     // Store combined metrics
-    const totalDistance = (parseFloat(toPickupRoute.distance) || 0) + (parseFloat(toDeliveryRoute.distance) || 0)
+    const dist1 = Number(toPickupRoute.distance) || 0
+    const dist2 = Number(toDeliveryRoute.distance) || 0
+    const totalDistance = dist1 + dist2
     const totalDuration = (toPickupRoute.duration || 0) + (toDeliveryRoute.duration || 0)
-    setRouteMetrics({ distance: totalDistance, duration: totalDuration })
+    setRouteMetrics({ distance: parseFloat(totalDistance.toFixed(1)), duration: totalDuration })
     setRoute([...toPickupRoute.coordinates, ...toDeliveryRoute.coordinates])
     
     await animateIntraCityDelivery(dMarker, toPickupRoute.coordinates, toDeliveryRoute.coordinates)
   }
 
   const animateAlongRoute = async (marker, route) => {
-    for (let i = 0; i < route.length; i++) {
+    const step = Math.max(1, Math.floor(route.length / 30))
+    for (let i = 0; i < route.length; i += step) {
       const point = route[i]
       marker.setLatLng([point.lat, point.lng])
       setCurrentStep(i)
-      await sleep(200)
+      await sleep(100)
     }
   }
 
@@ -341,7 +367,7 @@ export default function DeliverySimulation() {
         if (data.routes && data.routes[0]) {
           const route = data.routes[0]
           const coords = route.geometry.coordinates
-          const distance = (route.distance / 1000).toFixed(1) // km
+          const distance = parseFloat((route.distance / 1000).toFixed(1)) // km as number
           const duration = Math.round(route.duration / 60) // minutes
           
           return {
@@ -355,13 +381,25 @@ export default function DeliverySimulation() {
       console.error('OSRM routing failed:', error)
     }
     
-    // Fallback to simple route
+    // Fallback: calculate straight-line distance
+    const distance = calculateDistance(start.lat, start.lng, end.lat, end.lng)
     const simpleRoute = generateSimpleRoute(start, end, end).slice(0, 15)
     return {
       coordinates: simpleRoute,
-      distance: 0,
-      duration: 0
+      distance: parseFloat(distance.toFixed(1)),
+      duration: Math.round(distance * 2)
     }
+  }
+
+  const calculateDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371 // Earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLng = (lng2 - lng1) * Math.PI / 180
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return R * c
   }
 
   const drawSingleRoute = (route, mapInstance, color) => {
@@ -455,11 +493,12 @@ export default function DeliverySimulation() {
     addEvent('Driver heading to pickup location', 'info')
     await updateOrderStatus('in_transit')
     
-    for (let i = 0; i < toPickupRoute.length; i++) {
+    const step1 = Math.max(1, Math.floor(toPickupRoute.length / 20))
+    for (let i = 0; i < toPickupRoute.length; i += step1) {
       const point = toPickupRoute[i]
       marker.setLatLng([point.lat, point.lng])
       setCurrentStep(i)
-      await sleep(200)
+      await sleep(100)
     }
 
     // Phase 2: At pickup
@@ -473,11 +512,12 @@ export default function DeliverySimulation() {
     addEvent('Driver heading to delivery location', 'info')
     await updateOrderStatus('out_for_delivery')
     
-    for (let i = 0; i < toDeliveryRoute.length; i++) {
+    const step2 = Math.max(1, Math.floor(toDeliveryRoute.length / 20))
+    for (let i = 0; i < toDeliveryRoute.length; i += step2) {
       const point = toDeliveryRoute[i]
       marker.setLatLng([point.lat, point.lng])
       setCurrentStep(toPickupRoute.length + i)
-      await sleep(200)
+      await sleep(100)
     }
 
     // Phase 4: Delivered

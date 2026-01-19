@@ -96,19 +96,19 @@ export default function CreateOrder() {
       }
     } catch (error) {
       console.error('Price calculation error:', error)
-      // Fallback calculation
-      const basePrice = isInterCity ? 80 : 25
-      const weightCost = isInterCity ? weight * 8 : weight * 3
+      // Fallback calculation - MOROCCAN RATES
+      const basePrice = isInterCity ? 30 : 15  // MAD
+      const weightCost = weight * 2  // 2 MAD per kg
       
       let warehouseFee = 0
       if (isInterCity) {
-        if (formData.pickup_option === 'warehouse_dropoff') warehouseFee += 15
-        if (formData.delivery_option === 'warehouse_pickup') warehouseFee += 15
+        if (formData.pickup_option === 'warehouse_dropoff') warehouseFee += 10  // Reduced from 15
+        if (formData.delivery_option === 'warehouse_pickup') warehouseFee += 10  // Reduced from 15
       }
       
-      const insuranceFee = parseFloat(formData.insurance_value) * 0.02
-      const fragileFee = formData.fragile ? 25 : 0
-      const serviceMultiplier = formData.service_type === 'express' ? 1.5 : 1.0
+      const insuranceFee = parseFloat(formData.insurance_value) * 0.01  // Reduced from 0.02
+      const fragileFee = formData.fragile ? 15 : 0  // Reduced from 25
+      const serviceMultiplier = formData.service_type === 'express' ? 1.3 : 1.0  // Reduced from 1.5
       
       const total = (basePrice + weightCost + warehouseFee + insuranceFee + fragileFee) * serviceMultiplier
       
